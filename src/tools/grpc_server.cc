@@ -8,6 +8,7 @@
 #include "src/tools/limits.h"
 #include "src/tools/grpc_server.h"
 
+#include "gflags/gflags.h"
 #include <json-c/json.h>
 
 #include <algorithm>
@@ -23,6 +24,8 @@ using grpc::Status;
 using grpc::StatusCode;
 
 using std::string;
+
+DEFINE_int32(max_matches, 50, "The default maximum number of matches to return for a single query.");
 
 class CodeSearchImpl final : public CodeSearch::Service {
  public:
@@ -259,7 +262,11 @@ Status CodeSearchImpl::Search(ServerContext* context, const ::Query* request, ::
         return st;
 
     q.trace_id = current_trace_id();
+
     q.max_matches = request->max_matches();
+    if (FLAGS_max_matches)
+        if (q.max_matches <= 0 || q.max_matches >= FLAGS_max_matches)
+            q.max_matches = FLAGS_max_matches;
 
     log(q.trace_id,
         "processing query line='%s' file='%s' tree='%s' tags='%s' "
@@ -304,7 +311,7 @@ Status CodeSearchImpl::Search(ServerContext* context, const ::Query* request, ::
     match_stats stats;
     if (q.tags_pat == NULL && tagdata_ && might_match_tags) {
         string regex;
-        int32_t max_matches = q.max_matches ? q.max_matches : 50;
+        int32_t max_matches = q.max_matches;  // remember original value
 
         add_match::line_set unique_lines;
         add_match cb(&unique_lines, response);
