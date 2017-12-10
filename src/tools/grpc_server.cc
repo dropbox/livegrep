@@ -264,9 +264,8 @@ Status CodeSearchImpl::Search(ServerContext* context, const ::Query* request, ::
     q.trace_id = current_trace_id();
 
     q.max_matches = request->max_matches();
-    if (FLAGS_max_matches)
-        if (q.max_matches <= 0 || q.max_matches >= FLAGS_max_matches)
-            q.max_matches = FLAGS_max_matches;
+    if (q.max_matches <= 0 && FLAGS_max_matches)
+        q.max_matches = FLAGS_max_matches;
 
     log(q.trace_id,
         "processing query line='%s' file='%s' tree='%s' tags='%s' "
