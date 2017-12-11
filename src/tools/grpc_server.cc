@@ -332,23 +332,13 @@ Status CodeSearchImpl::Search(ServerContext* context, const ::Query* request, ::
             q.max_matches = max_matches - cb.match_count();
             if (q.max_matches > 0) {
 
-                /* Third pass: does the pattern appear somewhere in the
-                   middle of any tags? */
-                regex = "[^\t]" + line_pat;
-                q.line_pat.reset(new RE2(regex, q.line_pat->options()));
-                run_tags_search(q, tagdata_, cb, tagmatch_, stats);
-
-                q.max_matches = max_matches - cb.match_count();
-                if (q.max_matches > 0) {
-
-                    /* Fourth and final pass: full corpus search. */
-                    q.line_pat.reset(new RE2(line_pat, q.line_pat->options()));
-                    code_searcher::search_thread *search;
-                    if (!pool_.try_pop(&search))
-                        search = new code_searcher::search_thread(cs_);
-                    search->match(q, cb, cb, &stats);
-                    pool_.push(search);
-                }
+              /* Third and final pass: full corpus search. */
+              q.line_pat.reset(new RE2(line_pat, q.line_pat->options()));
+              code_searcher::search_thread *search;
+              if (!pool_.try_pop(&search))
+                search = new code_searcher::search_thread(cs_);
+              search->match(q, cb, cb, &stats);
+              pool_.push(search);
             }
         }
     } else if (q.tags_pat == NULL) {
