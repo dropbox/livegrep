@@ -489,6 +489,9 @@ var FileGroupView = Backbone.View.extend({
 
 var MatchesView = Backbone.View.extend({
   el: $('#results'),
+  events: {
+    'click .file-extension': 'limitExtension',
+  },
   initialize: function() {
     this.model.search_results.on('search-complete', this.render, this);
     this.model.search_results.on('rerender', this.render, this);
@@ -507,11 +510,51 @@ var MatchesView = Backbone.View.extend({
     }, this);
     this.$el.append(pathResults);
 
+    var extension_map = {};
+
     this.model.search_results.each(function(file_group) {
       file_group.process_context_overlaps();
       var view = new FileGroupView({model: file_group});
       this.$el.append(view.render().el);
+      var r = /[^\/](\.[a-z]{1,6})$/i;
+      var match = file_group.path_info.path.match(r);
+      if (match) {
+        var ext = match[1];
+        extension_map[ext] = extension_map[ext] ? extension_map[ext] + 1 : 1;
+      }
     }, this);
+
+    var extension_array = [];
+    for (var ext in extension_map)
+      extension_array.push([extension_map[ext], ext]);
+
+    if (extension_array.length > 1) {
+      extension_array.sort(function(a, b) {return b[0] - a[0];})
+
+      var popular_extensions = []
+      var end = Math.min(extension_array.length, 5);
+      for (var i=0; i < end; i++)
+        popular_extensions.push(extension_array[i][1]);
+      popular_extensions.sort();
+
+      var fileExtensions = h.div({'cls': 'file-extensions'});
+      for (var i=0; i < popular_extensions.length; i++) {
+        var ext = popular_extensions[i];
+        fileExtensions.append(h.button({'cls': 'file-extension'}, [ext]));
+      }
+      this.$el.prepend(fileExtensions);
+    }
+    return this;
+  },
+  limitExtension: function(e) {
+    var ext = e.target.textContent;
+    var q = CodesearchUI.input.val();
+    if (CodesearchUI.input_regex.is(':checked'))
+      q = 'file:\\' + ext + '$ ' + q;
+    else
+      q = 'file:' + ext + ' ' + q;
+    CodesearchUI.input.val(q);
+    CodesearchUI.newsearch();
   }
 });
 
@@ -542,8 +585,10 @@ var ResultView = Backbone.View.extend({
 
     var url = this.model.url();
     if (this.last_url !== url ) {
-      if (history.replaceState) {
-        history.replaceState(null, '', url);
+      if (history.pushState) {
+        var browser_url = window.location.pathname + window.location.search;
+        if (browser_url !== url)
+          history.pushState(null, '', url);
       }
       this.last_url = url;
     }
@@ -640,6 +685,13 @@ var CodesearchUI = function() {
       CodesearchUI.toggle_context();
 
       Codesearch.connect(CodesearchUI);
+
+      // Update the search when the user hits Forward or Back.
+      window.onpopstate = function(event) {
+        var parms = CodesearchUI.parse_query_params();
+        CodesearchUI.init_query_from_parms(parms);
+        CodesearchUI.newsearch();
+      }
     },
     toggle_context: function(){
       CodesearchUI.state.set('context', CodesearchUI.input_context.prop('checked'));
@@ -673,9 +725,11 @@ var CodesearchUI = function() {
       if (parms.fold_case) {
         CodesearchUI.inputs_case.filter('[value='+parms.fold_case[0]+']').attr('checked', true);
       }
-      if (parms.regex && parms.regex[0] === "true") {
-        CodesearchUI.input_regex.prop('checked', true);
+
+      if (parms.regex) {
+        CodesearchUI.input_regex.prop('checked', parms.regex[0] === "true");
       }
+
       if (parms.context) {
         CodesearchUI.input_context.prop('checked', parms.context[0] === 'true');
       }
