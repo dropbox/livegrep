@@ -552,7 +552,7 @@ var MatchesView = Backbone.View.extend({
     if (CodesearchUI.input_regex.is(':checked'))
       q = 'file:\\' + ext + '$ ' + q;
     else
-      q = 'file:.' + ext + ' ' + q;
+      q = 'file:' + ext + ' ' + q;
     CodesearchUI.input.val(q);
     CodesearchUI.newsearch();
   }
@@ -585,8 +585,10 @@ var ResultView = Backbone.View.extend({
 
     var url = this.model.url();
     if (this.last_url !== url ) {
-      if (history.replaceState) {
-        history.replaceState(null, '', url);
+      if (history.pushState) {
+        var browser_url = window.location.pathname + window.location.search;
+        if (browser_url !== url)
+          history.pushState(null, '', url);
       }
       this.last_url = url;
     }
@@ -683,6 +685,13 @@ var CodesearchUI = function() {
       CodesearchUI.toggle_context();
 
       Codesearch.connect(CodesearchUI);
+
+      // Update the search when the user hits Forward or Back.
+      window.onpopstate = function(event) {
+        var parms = CodesearchUI.parse_query_params();
+        CodesearchUI.init_query_from_parms(parms);
+        CodesearchUI.newsearch();
+      }
     },
     toggle_context: function(){
       CodesearchUI.state.set('context', CodesearchUI.input_context.prop('checked'));
@@ -716,9 +725,11 @@ var CodesearchUI = function() {
       if (parms.fold_case) {
         CodesearchUI.inputs_case.filter('[value='+parms.fold_case[0]+']').attr('checked', true);
       }
-      if (parms.regex && parms.regex[0] === "true") {
-        CodesearchUI.input_regex.prop('checked', true);
+
+      if (parms.regex) {
+        CodesearchUI.input_regex.prop('checked', parms.regex[0] === "true");
       }
+
       if (parms.context) {
         CodesearchUI.input_context.prop('checked', parms.context[0] === 'true');
       }
