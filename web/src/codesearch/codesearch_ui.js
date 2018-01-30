@@ -644,11 +644,14 @@ var ResultView = Backbone.View.extend({
             // user will need to backspace twice to go back to the
             // previous page.
             history.replaceState(null, '', url);
+
           } else if (now - last_url_update > two_seconds) {
             history.pushState(null, '', url);
+
           } else {
             history.replaceState(null, '', url);
           }
+
           last_url_update = now;
         }
       }

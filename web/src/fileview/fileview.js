@@ -164,9 +164,37 @@ function init(initData) {
       }
     }
 
-    // Update the external-browse link
+    // Update the blame and external-browse links
+    $('#blame-link').attr('href', getBlameLink(range));
+    $('#log-link').attr('href', getLogLink());
     $('#external-link').attr('href', getExternalLink(range));
     updateFragments(range, $('#permalink, #back-to-head'));
+  }
+
+  function getLogLink() {
+    var fileInfo = getFileInfo();
+
+    var url = '/log/{name}/{path}';
+    url = url.replace('{name}', fileInfo.repoName);
+    url = url.replace('{path}', fileInfo.pathInRepo);
+
+    return url;
+  }
+
+  function getBlameLink(range) {
+    var fileInfo = getFileInfo();
+
+    // Reassemble a new URL.
+    var url = '/blame/{name}/{version}/{path}/';
+    url = url.replace('{version}', initData.commit);
+    url = url.replace('{name}', fileInfo.repoName);
+    url = url.replace('{path}', fileInfo.pathInRepo);
+
+    // Maybe add a line number hash.
+    if (range !== null) {
+      url += '#' + range.start;
+    }
+    return url;
   }
 
   function getLineNumber(range) {
@@ -188,7 +216,7 @@ function init(initData) {
 
     var fileInfo = getFileInfo();
 
-    url = initData.repo_info.metadata['url-pattern']
+    var url = initData.repo_info.metadata['url-pattern']
 
     // If {path} already has a slash in front of it, trim extra leading
     // slashes from `pathInRepo` to avoid a double-slash in the URL.
@@ -209,7 +237,7 @@ function init(initData) {
       var $a = $(this);
       var href = $a.attr('href').split('#')[0];
       if (range !== null) {
-        href += '#L' + getLineNumber(range);
+        href += '#L' + range.start;
       }
       $a.attr('href', href);
     });
@@ -237,14 +265,23 @@ function init(initData) {
         hideHelp();
       }
       $('#query').blur();
+    } else if(String.fromCharCode(event.which) == 'B') {
+      // Visually highlight the link to indicate what happened
+      $('#blame-link').focus();
+      window.location = $('#blame-link').attr('href');
+    } else if (String.fromCharCode(event.which) == 'L') {
+      var $a = $('#log-link');
+      if ($a.length > 0) {
+        $a.focus();
+        window.location = $('#log-link').attr('href');
+      }
     } else if(String.fromCharCode(event.which) == 'V') {
       // Visually highlight the external link to indicate what happened
       $('#external-link').focus();
       window.location = $('#external-link').attr('href');
     } else if (String.fromCharCode(event.which) == 'Y') {
       var $a = $('#permalink');
-      var permalink_is_present = $a.length > 0;
-      if (permalink_is_present) {
+      if ($a.length > 0) {
         $a.focus();
         window.location = $a.attr('href');
       }
