@@ -10,6 +10,10 @@ var KeyCodes = {
   SLASH_OR_QUESTION_MARK: 191
 };
 
+function getSelection() {
+  return window.getSelection ? window.getSelection() : null;
+}
+
 function getSelectedText() {
   return window.getSelection ? window.getSelection().toString() : null;
 }
@@ -26,6 +30,80 @@ function doSearch(event, query, newTab) {
   } else {
     window.location.href = url
   }
+}
+
+function isInCodeScope(node) {
+  /** Verify if the given node is located in the code. */
+  while (node) {
+    if (node.getAttribute("id") === "source-code") {
+      return true;
+    } else {
+      node = node.parentElement;
+    }
+  }
+  return false;
+}
+
+function wrapSelection(selection, index) {
+  var wrappedNode = document.createElement("span");
+  selection.getRangeAt(0).surroundContents(wrappedNode);
+  return {
+    current: false,
+    node: wrappedNode,
+    selection: selection,
+  }
+}
+
+function highlightSelection(selections, color) {
+  for (var i = 0; i < selections.length; ++i) {
+    selections[i].node.style = "background-color: " + color;
+  }
+}
+
+function checkGetSelections() {
+  var selection = getSelection();
+  if (!selection) {
+    return false;
+  }
+  try {
+    var wrappedNode = document.createElement("span");
+    selection.getRangeAt(0).surroundContents(wrappedNode);
+  } catch(err) {
+    return false;
+  }
+  return true;
+}
+
+function getSelectionsInCode() {
+  var selection = getSelection();
+  var selections = [];
+  if (!selection) {
+    return selections;
+  }
+  var selectedText = selection.toString();
+  if (!selectedText) {
+    return selections;
+  }
+  var saveScrollPosition = $(window).scrollTop();
+  var position = 0;
+  while (window.find(selectedText, false, true)) {
+    ++position;
+  }
+  selection = getSelection();
+  if (isInCodeScope(selection.baseNode.parentElement)) {
+    selections.push(wrapSelection(selection, selections.length));
+  }
+  while (window.find(selectedText)) {
+    if (isInCodeScope(selection.baseNode.parentElement)) {
+      selections.push(wrapSelection(getSelection(), selections.length));
+    }
+  }
+  for (var i = selections.length - 1; i > position; --i) {
+    window.find(selectedText, false, true);
+  }
+  $(window).scrollTop(saveScrollPosition);
+  selections[position].current = true;
+  return selections;
 }
 
 function scrollToRange(range, elementContainer) {
@@ -113,6 +191,8 @@ function init(initData) {
   var root = $('.file-content');
   var lineNumberContainer = root.find('.line-numbers');
   var helpScreen = $('.help-screen');
+  var selections = null;
+  var prevSelectedText = null;
 
   function showHelp() {
     helpScreen.removeClass('hidden').children().on('click', function(event) {
@@ -238,6 +318,14 @@ function init(initData) {
         hideHelp();
       }
       $('#query').blur();
+
+      // If we have any highlighting, clear that.
+      if (selections) {
+        highlightSelection(selections, "none");
+        delete selections;
+        selections = null;
+      }
+      prevSelectedText = null;
     } else if(String.fromCharCode(event.which) == 'B') {
       // Visually highlight the external link to indicate what happened
       $('#blame-link').focus();
@@ -253,8 +341,89 @@ function init(initData) {
         $a.focus();
         window.location = $a.attr('href');
       }
-    }
+    } else if (String.fromCharCode(event.which) == 'N' ||
+               String.fromCharCode(event.which) == 'P' ||
+               String.fromCharCode(event.which) == 'M') {
+      /** 
+       * There is the description of the logic for next/previous and highlighting.
+       *
+       * M workes only with the variables, we cannot highlight group of variables, but we can highlight part of the
+       * variable.
+       *
+       * In the case we cannot highlight the word, we just use simple next/previous logic.
+       *
+       * Otherwise:
+       *   * If we press M for the new word, that creates new highlighting.
+       *   * If we press M for the same word, that removes the highlighting.
+       *   * Pressing N/P works same as press M and then press N/P (if there were no highlighting before).
+       */
+      var selectedText = getSelectedText();
+      var sameSelectedWord = prevSelectedText === selectedText;
+      prevSelectedText = selectedText;
+      var isHighlightAction = String.fromCharCode(event.which) === 'M';
 
+      if (isHighlightAction) {
+        // In any case we need to clear the highlighting.
+        if (selections) {
+          highlightSelection(selections, "none");
+          delete selections;
+          selections = null;
+        } 
+        // If we had the same request, that is it, otherwise, we need to try to highlight new selection.
+        if (!sameSelectedWord && selectedText) {
+          if (!checkGetSelections()) {
+            return true;
+          }
+          selections = getSelectionsInCode();
+          highlightSelection(selections, "pink");
+        } else {
+          prevSelectedText = null;
+        }
+      } else {
+        // We need to clear the highlighting if there was previous one and we have a new selection.
+        if (selections && !sameSelectedWord) {
+          highlightSelection(selections, "none");
+          delete selections;
+          selections = null;
+        }
+        if (!selectedText) {
+          prevSelectedText = null;
+          return true;
+        }
+        var goBackwards = String.fromCharCode(event.which) === 'P';
+        // If we have no selections we try to get one, as the fallback we just go for the simple window find logic.
+        if (!selections) {
+          if (!checkGetSelections()) {
+            window.find(selectedText, false, goBackwards);
+            var curSelection = getSelection();
+            if (!isInCodeScope(curSelection.baseNode.parentElement)) {
+              window.find(selectedText, false, !goBackwards);
+            }
+            return true;
+          }
+          selections = getSelectionsInCode();
+          highlightSelection(selections, "pink");
+        }
+
+        var currentPosition = -1;
+        for (var i = 0; i < selections.length; ++i) {
+          if (selections[i].current) {
+            currentPosition = i;
+            break;
+          }
+        }
+        var nextPosition = (currentPosition + (goBackwards ? -1 : 1) + selections.length) % selections.length;
+        selections[currentPosition].current = false;
+        selections[nextPosition].current = true;
+        if ((currentPosition == 0 && goBackwards) || (currentPosition == selections.length - 1 && !goBackwards)) { 
+          for (var i = 0; i < selections.length; ++i) {
+            window.find(selectedText, false, !goBackwards);
+          }
+        } else {
+          window.find(selectedText, false, goBackwards);
+        }
+      }
+    }
     return true;
   }
 
