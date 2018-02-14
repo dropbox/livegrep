@@ -7,6 +7,7 @@ import (
 	stdlog "log"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	texttemplate "text/template"
 	"time"
@@ -28,6 +29,7 @@ type Templates struct {
 	FileView,
 	BlameDiff,
 	BlameFile,
+	LogFile,
 	About *template.Template
 	OpenSearch *texttemplate.Template `template:"opensearch.xml"`
 }
@@ -147,6 +149,52 @@ func (s *server) ServeFile(ctx context.Context, w http.ResponseWriter, r *http.R
 	})
 }
 
+func (s *server) ServeLog(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	repoName := r.URL.Query().Get(":repo")
+	path := pat.Tail("/log/:repo/", r.URL.Path)
+	offsetStr := r.URL.Query().Get("offset")
+
+	offset := 0
+	if offsetStr != "" {
+		var err error
+		offset, err = strconv.Atoi(offsetStr)
+		if err != nil {
+			http.Error(w, "Invalid offset", 500)
+			return
+		}
+	}
+
+	repo, ok := s.repos[repoName]
+	if !ok {
+		http.Error(w, "No such repo", 404)
+		return
+	}
+
+	gitHistory, ok := histories[repo.Name]
+	if !ok {
+		http.Error(w, "Repo not configued for log", 404)
+		return
+	}
+
+	data := LogData{}
+	err := buildLogData(repo, gitHistory, path, offset, &data)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	err = s.T.LogFile.Execute(w, map[string]interface{}{
+		"cssTag": templates.LinkTag("stylesheet",
+			"/assets/css/blame.css", s.AssetHashes),
+		"path": path,
+		"repo": repo,
+		"data": data,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+	}
+}
+
 func (s *server) parseBlameURL(r *http.Request) (string, string, error) {
 	if len(s.repos) == 0 {
 		return "", "", fmt.Errorf("File browsing not enabled")
@@ -172,6 +220,7 @@ func (s *server) ServeBlame(ctx context.Context, w http.ResponseWriter, r *http.
 	gitHistory, ok := histories[repo.Name]
 	if !ok {
 		http.Error(w, "Repo not configured for blame", 404)
+		return
 	}
 
 	rest := pat.Tail("/blame/:repo/:hash/", r.URL.Path)
@@ -431,6 +480,7 @@ func New(cfg *config.Config) (http.Handler, error) {
 	}
 
 	m := pat.New()
+	m.Add("GET", "/log/:repo/", srv.Handler(srv.ServeLog))
 	m.Add("GET", "/blame/:repo/:hash/", srv.Handler(srv.ServeBlame))
 	m.Add("GET", "/diff/:repo/:hash/", srv.Handler(srv.ServeDiff))
 	m.Add("GET", "/debug/healthcheck", http.HandlerFunc(srv.ServeHealthcheck))

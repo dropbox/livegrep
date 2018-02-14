@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -53,6 +54,12 @@ type BlameLine struct {
 	OldLineNumber      int
 	NewLineNumber      int
 	Symbol             string
+}
+
+type LogData struct {
+	CommitInfos []string
+	PrevOffset  int
+	NextOffset  int
 }
 
 var histories = make(map[string]*blameworthy.GitHistory)
@@ -460,6 +467,57 @@ func extendDiff(
 	content_lines = append(content_lines, "")
 
 	return lines, content_lines, nil
+}
+
+var logPaginationLimit = 3
+
+func buildLogData(
+	repo config.RepoConfig,
+	gitHistory *blameworthy.GitHistory,
+	path string,
+	offset int,
+	data *LogData,
+) error {
+	diffs, ok := gitHistory.Files[path]
+	if !ok {
+		return errors.New("Could not find path in blame")
+	}
+
+	// The diffs are in reverse chronological order.
+	count := 0
+	for i := len(diffs) - 1 - offset; i >= 0; i-- {
+		if count == logPaginationLimit {
+			break
+		}
+		count++
+
+		commitInfo, err := gitShowCommit(diffs[i].Commit.Hash, repo.Path)
+		if err != nil {
+			return err
+		}
+		data.CommitInfos = append(data.CommitInfos, commitInfo)
+	}
+
+	// Set LastOffset
+	if offset > 0 {
+		prevOffset := offset - logPaginationLimit
+		if prevOffset < 0 {
+			data.PrevOffset = 0
+		} else {
+			data.PrevOffset = prevOffset
+		}
+	} else {
+		data.PrevOffset = -1
+	}
+
+	// Set NextOffset
+	if offset+logPaginationLimit >= len(diffs) {
+		data.NextOffset = -1
+	} else {
+		data.NextOffset = offset + logPaginationLimit
+	}
+
+	return nil
 }
 
 func gitShowCommit(commitHash string, repoPath string) (string, error) {
