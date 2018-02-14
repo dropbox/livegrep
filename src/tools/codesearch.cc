@@ -92,7 +92,13 @@ void build_index(code_searcher *cs, const vector<std::string> &argv) {
         fprintf(stderr, "Walking path_spec name=%s, path=%s\n",
                 it->name.c_str(), it->path.c_str());
         fs_indexer indexer(cs, it->path, it->name, it->metadata);
-        indexer.walk(it->path);
+        if (it->ordered_contents.empty()) {
+            fprintf(stderr, "  walking full tree\n");
+            indexer.walk(it->path);
+        } else {
+            fprintf(stderr, "  walking %zu paths from ordered contents list\n", it->ordered_contents.size());
+            indexer.walk(it->ordered_contents);
+        }
         fprintf(stderr, "done\n");
     }
 

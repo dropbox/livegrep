@@ -25,11 +25,16 @@ fs_indexer::fs_indexer(code_searcher *cs,
 fs_indexer::~fs_indexer() {
 }
 
-void fs_indexer::read_file(const string& path) {
+void fs_indexer::read_file(const fs::path& path) {
     ifstream in(path.c_str(), ios::in);
-    string relpath(mismatch(path.begin(), path.end(), repopath_.begin()).first,
-                   path.end());
-    cs_->index_file(tree_, relpath, StringPiece(static_cast<stringstream const&>(stringstream() << in.rdbuf()).str().c_str(), fs::file_size(path)));
+    fs::path relpath = fs::relative(path, repopath_);
+    cs_->index_file(tree_, relpath.string(), StringPiece(static_cast<stringstream const&>(stringstream() << in.rdbuf()).str().c_str(), fs::file_size(path)));
+}
+
+void fs_indexer::walk(const vector<string>& ordered_contents) {
+    for (const string& input_path : ordered_contents) {
+        read_file(fs::path(repopath_) / input_path);
+    }
 }
 
 void fs_indexer::walk(const string& path) {
@@ -46,7 +51,7 @@ void fs_indexer::walk(const string& path) {
             if (fs::is_directory(itr->status()) ) {
                 fs_indexer::walk(itr->path().c_str());
             } else if (fs::is_regular_file(itr->status()) ) {
-                fs_indexer::read_file(itr->path().c_str());
+                fs_indexer::read_file(itr->path());
             }
         }
     } else if (fs::is_regular_file(path)) {
