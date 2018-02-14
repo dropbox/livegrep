@@ -34,7 +34,7 @@ void fs_indexer::read_file(const fs::path& path) {
 void fs_indexer::walk_contents_file(const fs::path& contents_file_path) {
     ifstream contents_file(contents_file_path.c_str(), ios::in);
     if (!contents_file.is_open()) {
-        throw std::ifstream::failure("Unable to open contents file for reading");
+        throw std::ifstream::failure("Unable to open contents file for reading: " + contents_file_path.string());
     }
     string path;
     while (std::getline(contents_file, path)) {
