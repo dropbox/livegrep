@@ -4,11 +4,7 @@
         {
             "name": "livegrep/livegrep",
             "path": "src/",
-            "ordered-contents": [
-                "./codesearch.cc",
-                "./codesearch.h",
-                "./BUILD",
-            ],
+            "ordered-contents": "ordered-contents.txt",
             "metadata": {
                 "url-pattern": "https://github.com/{name}/blob/HEAD/src/{path}#L{lno}"
             }

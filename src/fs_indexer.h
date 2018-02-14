@@ -21,8 +21,8 @@ public:
                const string& name,
                json_object *metadata = 0);
     ~fs_indexer();
-    void walk(const std::vector<std::string>& ordered_contents);
-    void walk(const std::string& path);
+    void walk(const boost::filesystem::path& path);
+    void walk_contents_file(const boost::filesystem::path& contents_file_path);
 protected:
     code_searcher *cs_;
     std::string repopath_;

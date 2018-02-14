@@ -18,7 +18,7 @@ struct json_object;
 struct path_spec {
     std::string path;
     std::string name;
-    std::vector<std::string> ordered_contents;
+    std::string ordered_contents_file_path;
     json_object *metadata;
 
     path_spec() : metadata(NULL) {}
