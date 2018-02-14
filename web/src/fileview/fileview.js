@@ -149,8 +149,22 @@ function init(initData) {
 
     // Update the blame and external-browse links
     $('#blame-link').attr('href', getBlameLink(range));
+    $('#log-link').attr('href', getLogLink());
     $('#external-link').attr('href', getExternalLink(range));
     updateFragments(range, $('#permalink, #back-to-head'));
+  }
+
+  function getLogLink() {
+    // Disassemble the current URL.
+    var path = window.location.pathname.slice(6); // Strip "/view/" prefix
+    var repoName = path.split('/')[0];
+    var pathInRepo = path.slice(repoName.length + 1).replace(/^\/+/, '');
+
+    var url = '/log/{name}/{path}';
+    url = url.replace('{name}', repoName);
+    url = url.replace('{path}', pathInRepo);
+
+    return url;
   }
 
   function getBlameLink(range) {
@@ -160,7 +174,7 @@ function init(initData) {
     var pathInRepo = path.slice(repoName.length + 1).replace(/^\/+/, '');
 
     // Reassemble a new URL.
-    url = '/blame/{name}/{version}/{path}/';
+    var url = '/blame/{name}/{version}/{path}/';
     url = url.replace('{version}', initData.commit);
     url = url.replace('{name}', repoName);
     url = url.replace('{path}', pathInRepo);
@@ -190,7 +204,7 @@ function init(initData) {
     var repoName = path.split('/')[0];
     var pathInRepo = path.slice(repoName.length + 1);
 
-    url = initData.repo_info.metadata['url-pattern']
+    var url = initData.repo_info.metadata['url-pattern']
 
     // If {path} already has a slash in front of it, trim extra leading
     // slashes from `pathInRepo` to avoid a double-slash in the URL.
@@ -239,9 +253,12 @@ function init(initData) {
       }
       $('#query').blur();
     } else if(String.fromCharCode(event.which) == 'B') {
-      // Visually highlight the external link to indicate what happened
+      // Visually highlight the link to indicate what happened
       $('#blame-link').focus();
       window.location = $('#blame-link').attr('href');
+    } else if (String.fromCharCode(event.which) == 'L') {
+      $('#log-link').focus();
+      window.location = $('#log-link').attr('href');
     } else if(String.fromCharCode(event.which) == 'V') {
       // Visually highlight the external link to indicate what happened
       $('#external-link').focus();
