@@ -6,11 +6,16 @@
 </head>
 <body class="logfile"><div id="header">                                        <b>THIS FEATURE IS IN ALPHA TESTING - PLEASE PING brhodes@ NOT #code-workflows :)</b></div>
 
-  {{range $info := .data.CommitInfos}}
-  <div>{{$info}}</div>
-  {{end}}
+Viewing history for <a href="/view/{{.repo.Name}}/{{.path}}">{{.path}}</a>
+{{$repo := .repo}}{{$path := .path}}
+{{range $info := .logData.Blames}}
+<div><a href="/view/{{$repo.Name}}/{{$path}}?commit={{$info.CommitHash}}">view</a>  <a href="/diff/{{$repo.Name}}/{{$info.CommitHash}}">diff</a>  <a href="/blame/{{$repo.Name}}/{{$info.CommitHash}}/{{$path}}/">blame</a>
+Date: {{$info.Date}}
+Subject: {{$info.Subject}}
+Author: {{$info.Author}}</div>
+{{end}}
 
-{{if (ne .data.PrevOffset -1)}}<a href="/log/{{.repo.Name}}/{{.path}}?offset={{.data.PrevOffset}}">«</a>{{else}} {{end}}   {{if (ne .data.NextOffset -1)}}<a href="/log/{{.repo.Name}}/{{.path}}?offset={{.data.NextOffset}}">»</a>{{end}}
+{{if (ne .logData.PrevOffset -1)}}<a href="/log/{{.repo.Name}}/{{.path}}?offset={{.logData.PrevOffset}}">«</a>{{else}} {{end}}   {{if (ne .logData.NextOffset -1)}}<a href="/log/{{.repo.Name}}/{{.path}}?offset={{.logData.NextOffset}}">»</a>{{end}}
 
 </body>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>

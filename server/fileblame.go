@@ -57,10 +57,20 @@ type BlameLine struct {
 }
 
 type LogData struct {
-	CommitInfos []string
-	PrevOffset  int
-	NextOffset  int
+	// Only CommitHash, Author, Date, and Subject are filled in
+	// for the blame data.
+	Blames []BlameData
+	// NextOffset is the offset to navigate to in order to
+	// paginate forwards. Will be -1 if you can't paginate
+	// forwards.
+	NextOffset int
+	// PrevOffset is the offset to navigate to in order to
+	// paginate backwards. Will be -1 if you can't paginate
+	// backwards.
+	PrevOffset int
 }
+
+var logPaginationLimit = 100
 
 var histories = make(map[string]*blameworthy.GitHistory)
 var historiesLock = sync.RWMutex{}
@@ -469,21 +479,19 @@ func extendDiff(
 	return lines, content_lines, nil
 }
 
-var logPaginationLimit = 3
-
 func buildLogData(
 	repo config.RepoConfig,
 	gitHistory *blameworthy.GitHistory,
 	path string,
-	offset int,
-	data *LogData,
-) error {
+	offset int) (data LogData, err error) {
+
 	diffs, ok := gitHistory.Files[path]
 	if !ok {
-		return errors.New("Could not find path in blame")
+		return LogData{}, errors.New("Could not find path in blame")
 	}
 
-	// The diffs are in reverse chronological order.
+	// diffs is in chronological order, but we want to return
+	// them in reverse chronological order.
 	count := 0
 	for i := len(diffs) - 1 - offset; i >= 0; i-- {
 		if count == logPaginationLimit {
@@ -491,33 +499,49 @@ func buildLogData(
 		}
 		count++
 
-		commitInfo, err := gitShowCommit(diffs[i].Commit.Hash, repo.Path)
+		blameData := BlameData{}
+		err := resolveCommit(repo, diffs[i].Commit.Hash, repo.Path, &blameData)
 		if err != nil {
-			return err
+			return LogData{}, err
 		}
-		data.CommitInfos = append(data.CommitInfos, commitInfo)
+		data.Blames = append(data.Blames, blameData)
 	}
 
-	// Set LastOffset
+	// Set PrevOffset.
 	if offset > 0 {
+		// If our current offset is not 0, then we can
+		// paginate backwards by "offset - logPaginationLimit"
+		// (the current offset minus the number of commits the
+		// backwards pagination page will show).
 		prevOffset := offset - logPaginationLimit
+		// Cannot set previous offset to less than 0.
 		if prevOffset < 0 {
 			data.PrevOffset = 0
 		} else {
 			data.PrevOffset = prevOffset
 		}
 	} else {
+		// The current offset is 0, which means we can't
+		// paginate backwards.
 		data.PrevOffset = -1
 	}
 
-	// Set NextOffset
+	// Set NextOffset.
 	if offset+logPaginationLimit >= len(diffs) {
+		// Cannot paginate forwards.
+		// Convince yourself this is correct with this small example:
+		//  - diffs: [a, b, c, d], len: 4
+		//  - offset: 2
+		//  - logPaginationLimit: 2
+		//
+		// We will return [b, a], offset + logPaginationLimit
+		// is 4, which is >= than len(diffs)
 		data.NextOffset = -1
 	} else {
 		data.NextOffset = offset + logPaginationLimit
 	}
 
-	return nil
+	return data, nil
 }
 
 func gitShowCommit(commitHash string, repoPath string) (string, error) {

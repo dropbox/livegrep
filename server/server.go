@@ -159,7 +159,7 @@ func (s *server) ServeLog(ctx context.Context, w http.ResponseWriter, r *http.Re
 		var err error
 		offset, err = strconv.Atoi(offsetStr)
 		if err != nil {
-			http.Error(w, "Invalid offset", 500)
+			http.Error(w, "Invalid offset", 400)
 			return
 		}
 	}
@@ -176,8 +176,7 @@ func (s *server) ServeLog(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	data := LogData{}
-	err := buildLogData(repo, gitHistory, path, offset, &data)
+	logData, err := buildLogData(repo, gitHistory, path, offset)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -186,9 +185,9 @@ func (s *server) ServeLog(ctx context.Context, w http.ResponseWriter, r *http.Re
 	err = s.T.LogFile.Execute(w, map[string]interface{}{
 		"cssTag": templates.LinkTag("stylesheet",
 			"/assets/css/blame.css", s.AssetHashes),
-		"path": path,
-		"repo": repo,
-		"data": data,
+		"path":    path,
+		"repo":    repo,
+		"logData": logData,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), 500)
