@@ -84,6 +84,8 @@ function getSelectionsInCode() {
   selection = getSelection();
   if (isInCodeScope(selection)) {
     selections.push(wrapSelection(selection, selections.length));
+  } else {
+    --position;
   }
   while (window.find(selectedText)) {
     if (isInCodeScope(selection)) {
@@ -388,7 +390,7 @@ function init(initData) {
           if (!checkGetSelections()) {
             window.find(selectedText, false, goBackwards);
             var curSelection = getSelection();
-            if (!isInCodeScope(curSelection)) {
+            if (!isInCodeScope(curSelection.baseNode.parentElement)) {
               window.find(selectedText, false, !goBackwards);
             }
             return true;
@@ -408,7 +410,7 @@ function init(initData) {
         selections[currentPosition].current = false;
         selections[nextPosition].current = true;
         if ((currentPosition == 0 && goBackwards) || (currentPosition == selections.length - 1 && !goBackwards)) { 
-          for (var i = 0; i < selections.length; ++i) {
+          for (var i = 0; i < selections.length - 1; ++i) {
             window.find(selectedText, false, !goBackwards);
           }
         } else {
