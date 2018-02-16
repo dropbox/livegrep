@@ -10,6 +10,10 @@ var KeyCodes = {
   SLASH_OR_QUESTION_MARK: 191
 };
 
+function getSelection() {
+  return window.getSelection ? window.getSelection() : null;
+}
+
 function getSelectedText() {
   return window.getSelection ? window.getSelection().toString() : null;
 }
@@ -26,6 +30,10 @@ function doSearch(event, query, newTab) {
   } else {
     window.location.href = url
   }
+}
+
+function isInCodeScope(selection) {
+  return selection && $(selection.baseNode.parentElement).closest("code").length > 0;
 }
 
 function scrollToRange(range, elementContainer) {
@@ -113,6 +121,7 @@ function init(initData) {
   var root = $('.file-content');
   var lineNumberContainer = root.find('.line-numbers');
   var helpScreen = $('.help-screen');
+  var markInstance = null;
 
   function showHelp() {
     helpScreen.removeClass('hidden').children().on('click', function(event) {
@@ -238,6 +247,9 @@ function init(initData) {
         hideHelp();
       }
       $('#query').blur();
+
+      // If we have any highlighting, clear that.
+      !!markInstance && markInstance.unmark(); 
     } else if(String.fromCharCode(event.which) == 'B') {
       // Visually highlight the external link to indicate what happened
       $('#blame-link').focus();
@@ -253,8 +265,28 @@ function init(initData) {
         $a.focus();
         window.location = $a.attr('href');
       }
+    } else if (String.fromCharCode(event.which) == 'N' ||
+               String.fromCharCode(event.which) == 'P' ||
+               String.fromCharCode(event.which) == 'M') {
+      if (!markInstance) {
+        markInstance = new Mark($("code"));
+      }
+      var selectedText = getSelectedText();
+      if (!selectedText) {
+        return true;
+      }
+      var isHighlightAction = String.fromCharCode(event.which) === 'M';
+      markInstance.mark(selectedText, { acrossElements: true });
+      if (!isHighlightAction) {
+        window.find(selectedText);
+        var goBackwards = String.fromCharCode(event.which) === 'P';
+        window.find(selectedText, false, goBackwards);
+        var curSelection = getSelection();
+        if (!isInCodeScope(curSelection)) {
+          window.find(selectedText, false, !goBackwards);
+        }
+      }
     }
-
     return true;
   }
 
