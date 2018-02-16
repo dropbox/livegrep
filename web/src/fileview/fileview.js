@@ -33,7 +33,7 @@ function doSearch(event, query, newTab) {
 }
 
 function isInCodeScope(selection) {
-  return selection && $(selection.baseNode.parentElement).closest("code").length;
+  return selection && $(selection.baseNode.parentElement).closest("code").length > 0;
 }
 
 function wrapSelection(selection, index) {
