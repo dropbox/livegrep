@@ -130,6 +130,8 @@ function init(initData) {
   var root = $('.file-content');
   var lineNumberContainer = root.find('.line-numbers');
   var helpScreen = $('.help-screen');
+  var selectionReminder = $('.selection-reminder');
+  var selectionContent = $('.selection-content');
 
   function showHelp() {
     helpScreen.removeClass('hidden').children().on('click', function(event) {
@@ -145,6 +147,19 @@ function init(initData) {
     helpScreen.addClass('hidden').children().off('click');
     $(document).off('click', hideHelp);
     return true;
+  }
+
+  function showSelectionReminder(selection) {
+    selectionReminder.removeClass('hidden');
+    var truncatedSelection = selection.length > 40 ? selection.substring(0, 40) + '...' : selection;
+    selectionContent.text(truncatedSelection);
+    selectionReminder.on('click', function(event) {
+      doSearch(event, selection);
+    });
+  }
+
+  function hideSelectionReminder() {
+    selectionReminder.addClass('hidden');
   }
 
   function handleHashChange(scrollElementIntoView) {
@@ -340,6 +355,15 @@ function init(initData) {
       if(event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
         return;
       processKeyEvent(event);
+    });
+
+    $(document).mouseup(function() {
+      var selectedText = getSelectedText();
+      if(selectedText) {
+        showSelectionReminder(selectedText);
+      } else {
+        hideSelectionReminder();
+      }
     });
 
     initializeActionButtons($('.header .header-actions'));
