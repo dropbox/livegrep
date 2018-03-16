@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/"
+                       xmlns:moz="http://www.mozilla.org/2006/browser/search/">
     <ShortName>{{ .BackendName }} livegrep</ShortName>
     <Description>
       Interactively search source code using regular expressions, with
@@ -12,5 +13,6 @@
     <Developer>Nelson Elhage</Developer>
     <Contact>nelhage@nelhage.com</Contact>
     <Query role="example" searchTerms="printf\("/>
-    <Url type="text/html" template="{{ .BaseURL }}search/?q={searchTerms}"/>
+    <Url type="text/html" method="get"
+         template="{{ .BaseURL }}search/?q={searchTerms}"/>
 </OpenSearchDescription>
