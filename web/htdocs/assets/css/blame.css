@@ -30,10 +30,12 @@ position the blame div to its left. */
     display: none;
     position: absolute;
     left: 38ch;
+    max-width: 80ch;
     border: 1px solid #0a0;
     border-radius: 1ch;
     background-color: #efe;
     padding: 1em;
+    white-space: pre-wrap;
 }
 .commit-message:hover .commit-message-body {
     display: block;
