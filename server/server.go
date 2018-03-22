@@ -305,9 +305,7 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 	data.Date = data2.Date
 	data.Subject = data2.Subject
 	if len(data2.Body) > 0 {
-		i := "\n                                        "
-		s := i + i + strings.Replace(data2.Body, "\n", i, -1)
-		data.Body = templates.TurnURLsIntoLinks(s)
+		data.Body = templates.TurnURLsIntoLinks(data2.Body)
 	}
 	// TODO: add redirect if they don't use our version of the commit hash
 	// if data.CommitHash != commitHash {

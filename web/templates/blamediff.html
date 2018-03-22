@@ -10,7 +10,7 @@
 {{with .blame}}
 {{if .PreviousCommit}}«Previous commit{{else}}                {{end}}    {{if .NextCommit}}Next commit»{{else}}            {{end}}        Author: {{.Author}}
 {{if .PreviousCommit}}<a href="{{.PreviousCommit}}">{{.PreviousCommit}}</a>{{else}}                {{end}}    {{if .NextCommit}}<a href="{{.NextCommit}}">{{.NextCommit}}</a>{{else}}                {{end}}    Date: {{.Date}}
-                                        “{{.Subject}}”{{.Body}}
+                                        “{{.Subject}}”{{if .Body}}<span class="commit-message"> <b>Full commit message»</b><div class="commit-message-body">{{.Body}}</div></span>{{end}}
 
 Line added by:      Line deleted by:</div><div class="rtl"><div id="content">{{range .FileDiffs}}
 <b>================ <a href="/blame/{{$.repo.Name}}/{{$.commitHash}}/{{.Path}}/">{{.Path}}</a> ================</b>
