@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -26,6 +27,7 @@ type BlameData struct {
 	Author         string
 	Date           string
 	Subject        string
+	Body           string
 	Lines          []BlameLine
 	Content        string
 }
@@ -37,6 +39,7 @@ type DiffData struct {
 	Author         string
 	Date           string
 	Subject        string
+	Body           template.HTML
 	FileDiffs      []DiffFileData
 }
 
@@ -156,15 +159,16 @@ func resolveCommit(repo config.RepoConfig, commitName, path string, data *BlameD
 			}
 		}
 	}
-	output, err := gitShowCommit(commitName, repo.Path)
+	output, err := gitShowCommit(commitName, repo.Path, true)
 	if err != nil {
 		return err
 	}
-	lines := strings.Split(output, "\n")
+	lines := strings.SplitN(output, "\n", 5)
 	data.CommitHash = lines[0][:blameworthy.HashLength]
 	data.Author = lines[1]
 	data.Date = lines[2]
 	data.Subject = lines[3]
+	data.Body = strings.Trim(lines[4], "\n")
 	return nil
 }
 
@@ -601,11 +605,13 @@ func buildLogData(
 	return data, nil
 }
 
-func gitShowCommit(commitHash string, repoPath string) (string, error) {
-	// git show --pretty="%H%n%an <%ae>%n%ci%n%s" --quiet master master:travisdeps.sh
+func gitShowCommit(commitHash string, repoPath string, body bool) (string, error) {
+	fmt := "--pretty=%H%n%an <%ae>%n%ci%n%s"
+	if body {
+		fmt = "--pretty=%H%n%an <%ae>%n%ci%n%s%n%b"
+	}
 	out, err := exec.Command(
-		"git", "-C", repoPath, "show", "--quiet",
-		"--pretty=%H%n%an <%ae>%n%ci%n%s", commitHash,
+		"git", "-C", repoPath, "show", "--quiet", fmt, commitHash,
 	).Output()
 	if err != nil {
 		return "", err

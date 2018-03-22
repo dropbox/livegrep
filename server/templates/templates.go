@@ -8,13 +8,19 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"reflect"
+	"regexp"
 	"strings"
 	texttemplate "text/template"
 
 	"github.com/livegrep/livegrep/blameworthy"
+)
+
+var possibleURL = regexp.MustCompile(
+	`\bhttps?://[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=]+`,
 )
 
 func templatePath(f reflect.StructField) string {
@@ -31,6 +37,36 @@ func prettyCommit(c *blameworthy.Commit) string {
 			c.Author)
 	}
 	return c.Hash + "   " // turn 16 characters into 19
+}
+
+func TurnURLsIntoLinks(s string) template.HTML {
+	// Instead of using a complex RE that matches only valid URLs,
+	// let's match anything vaguely URL-like, then use Go's URL
+	// parser to decide whether it's a URL.
+	matches := possibleURL.FindAllStringIndex(s, -1)
+	i := 0
+	h := []string{}
+	for _, match := range matches {
+		j := match[0]
+		k := match[1]
+		h = append(h, template.HTMLEscapeString(s[i:j]))
+		u := s[j:k]
+		_, err := url.Parse(u)
+		if err != nil {
+			h = append(h, template.HTMLEscapeString(u))
+		} else {
+			h = append(h, "<a href=\"")
+			// should maybe go through "urlescaper" and
+			// "attrescaper", but template doesn't export them:
+			h = append(h, u)
+			h = append(h, "\">")
+			h = append(h, template.HTMLEscapeString(u))
+			h = append(h, "</a>")
+		}
+		i = k
+	}
+	h = append(h, template.HTMLEscapeString(s[i:len(s)]))
+	return template.HTML(strings.Join(h, ""))
 }
 
 func LinkTag(rel string, s string, m map[string]string) template.HTML {

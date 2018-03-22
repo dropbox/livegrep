@@ -255,6 +255,7 @@ func (s *server) ServeBlame(ctx context.Context, w http.ResponseWriter, r *http.
 		pat2 := "/" + data.CommitHash + "/"
 		destURL := strings.Replace(r.URL.Path, pat1, pat2, 1)
 		http.Redirect(w, r, destURL, 307)
+		return
 	}
 	err = buildBlameData(repo, hash, gitHistory, path, isDiff, &data)
 	if err != nil {
@@ -303,7 +304,12 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 	data.Author = data2.Author
 	data.Date = data2.Date
 	data.Subject = data2.Subject
-	// TODO: fix this
+	if len(data2.Body) > 0 {
+		i := "\n                                        "
+		s := i + i + strings.Replace(data2.Body, "\n", i, -1)
+		data.Body = templates.TurnURLsIntoLinks(s)
+	}
+	// TODO: add redirect if they don't use our version of the commit hash
 	// if data.CommitHash != commitHash {
 	// 	http.Redirect(w, r, data.CommitHash, 307)
 	// }

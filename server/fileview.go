@@ -199,7 +199,7 @@ func buildFileData(relativePath string, repo config.RepoConfig, commit string) (
 			h := blameHistory.Hashes
 			commitHash = h[len(h)-1]
 		} else {
-			out, err := gitShowCommit(commit, repo.Path)
+			out, err := gitShowCommit(commit, repo.Path, false)
 			if err == nil {
 				commitHash = out[:strings.Index(out, "\n")]
 			}
