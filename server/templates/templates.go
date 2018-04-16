@@ -4,14 +4,23 @@ import (
 	"bufio"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"reflect"
+	"regexp"
 	"strings"
 	texttemplate "text/template"
+
+	"github.com/livegrep/livegrep/blameworthy"
+)
+
+var possibleURL = regexp.MustCompile(
+	`\bhttps?://[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=]+`,
 )
 
 func templatePath(f reflect.StructField) string {
@@ -21,7 +30,46 @@ func templatePath(f reflect.StructField) string {
 	return strings.ToLower(f.Name) + ".html"
 }
 
-func linkTag(rel string, s string, m map[string]string) template.HTML {
+func prettyCommit(c *blameworthy.Commit) string {
+	if len(c.Author) > 0 && c.Date > 0 {
+		return fmt.Sprintf("%04d-%02d-%02d %.8s",
+			c.Date/10000, c.Date%10000/100, c.Date%100,
+			c.Author)
+	}
+	return c.Hash + "   " // turn 16 characters into 19
+}
+
+func TurnURLsIntoLinks(s string) template.HTML {
+	// Instead of using a complex RE that matches only valid URLs,
+	// let's match anything vaguely URL-like, then use Go's URL
+	// parser to decide whether it's a URL.
+	matches := possibleURL.FindAllStringIndex(s, -1)
+	i := 0
+	h := []string{}
+	for _, match := range matches {
+		j := match[0]
+		k := match[1]
+		h = append(h, template.HTMLEscapeString(s[i:j]))
+		u := s[j:k]
+		_, err := url.Parse(u)
+		if err != nil {
+			h = append(h, template.HTMLEscapeString(u))
+		} else {
+			h = append(h, "<a href=\"")
+			// should maybe go through "urlescaper" and
+			// "attrescaper", but template doesn't export them:
+			h = append(h, u)
+			h = append(h, "\">")
+			h = append(h, template.HTMLEscapeString(u))
+			h = append(h, "</a>")
+		}
+		i = k
+	}
+	h = append(h, template.HTMLEscapeString(s[i:len(s)]))
+	return template.HTML(strings.Join(h, ""))
+}
+
+func LinkTag(rel string, s string, m map[string]string) template.HTML {
 	hash := m[strings.TrimPrefix(s, "/")]
 	href := s + "?v=" + hash
 	hashBytes, _ := hex.DecodeString(hash)
@@ -40,10 +88,11 @@ func scriptTag(s string, m map[string]string) template.HTML {
 
 func getFuncs() map[string]interface{} {
 	return map[string]interface{}{
-		"loop":      func(n int) []struct{} { return make([]struct{}, n) },
-		"toLineNum": func(n int) int { return n + 1 },
-		"linkTag":   linkTag,
-		"scriptTag": scriptTag,
+		"loop":         func(n int) []struct{} { return make([]struct{}, n) },
+		"toLineNum":    func(n int) int { return n + 1 },
+		"prettyCommit": prettyCommit,
+		"linkTag":      LinkTag,
+		"scriptTag":    scriptTag,
 	}
 }
 
