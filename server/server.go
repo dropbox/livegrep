@@ -300,6 +300,13 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 	data := DiffData{}
 	data2 := BlameData{}
 	resolveCommit(repo, hash, "", &data2)
+	if data2.CommitHash != hash {
+		pat1 := "/" + hash + "/"
+		pat2 := "/" + data2.CommitHash + "/"
+		destURL := strings.Replace(r.URL.Path, pat1, pat2, 1)
+		http.Redirect(w, r, destURL, 307)
+		return
+	}
 	data.CommitHash = data2.CommitHash
 	data.Author = data2.Author
 	data.Date = data2.Date
