@@ -321,6 +321,12 @@ func buildDiffData(
 		return fmt.Errorf("No such commit")
 	}
 
+	// for _, diff := range commit.Diffs {
+	// 	fmt.Print(diff.Path, "\n")
+	// 	fmt.Print(diff.ChecksumBefore, "\n")
+	// 	fmt.Print(diff.ChecksumAfter, "\n")
+	// }
+
 	start := time.Now()
 	for _, diff := range commit.Diffs {
 		if time.Since(start) > diffTimeoutSeconds*time.Second {

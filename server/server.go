@@ -314,10 +314,6 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 	if len(data2.Body) > 0 {
 		data.Body = templates.TurnURLsIntoLinks(data2.Body)
 	}
-	// TODO: add redirect if they don't use our version of the commit hash
-	// if data.CommitHash != commitHash {
-	// 	http.Redirect(w, r, data.CommitHash, 307)
-	// }
 
 	err := buildDiffData(repo, hash, &data)
 	if err != nil {
