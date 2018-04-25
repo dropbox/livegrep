@@ -169,7 +169,7 @@ func ParseGitLog(input_stream io.ReadCloser) (*GitHistory, error) {
 			if groups == nil {
 				continue
 			}
-			checksum = groups[2]
+			checksum = emptyZero(groups[2])
 		} else if strings.HasPrefix(line, "--- ") {
 			path := line[4:]
 			scanner.Scan() // read the "+++" line
@@ -232,4 +232,12 @@ func ParseGitLog(input_stream io.ReadCloser) (*GitHistory, error) {
 		}
 	}
 	return &history, scanner.Err()
+}
+
+// Substitute the empty string for an all-zero git hash.
+func emptyZero(hash string) string {
+	if strings.Count(hash, "0") == len(hash) {
+		return ""
+	}
+	return hash
 }
