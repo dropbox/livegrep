@@ -73,6 +73,12 @@ type LogData struct {
 	PrevOffset int
 }
 
+type Rename struct {
+	oldPath string
+	newPath string
+	isCopy  bool
+}
+
 const (
 	diffTimeoutSeconds = 5.0 // most costly file takes about 1.2 seconds
 )
@@ -177,7 +183,6 @@ func buildBlameData(
 	commitHash string,
 	gitHistory *blameworthy.GitHistory,
 	path string,
-	isDiff bool,
 	data *BlameData,
 ) error {
 	start := time.Now()
@@ -315,14 +320,41 @@ func buildDiffData(
 		return fmt.Errorf("Repo not configured for blame")
 	}
 
-	// TODO: turn long hashes into short ones, in case they hand-edit URL?
 	commit, ok := gitHistory.Commits[commitHash]
 	if !ok {
 		return fmt.Errorf("No such commit")
 	}
 
+	befores := map[string]*blameworthy.Diff{}
+	afters := map[string]*blameworthy.Diff{}
+	for _, diff := range commit.Diffs {
+		befores[diff.ChecksumBefore] = diff
+		afters[diff.ChecksumAfter] = diff
+	}
+
 	start := time.Now()
 	for _, diff := range commit.Diffs {
+		if diff.ChecksumBefore == "" {
+			source, _ := befores[diff.ChecksumAfter]
+			if source != nil {
+				verb := "Copied from:"
+				if source.ChecksumAfter == "" {
+					verb = "Renamed from:"
+				}
+				data.FileDiffs = append(data.FileDiffs, DiffFileData{
+					diff.Path,
+					[]BlameLine{blankLine},
+					fmt.Sprintf("%16s %s\n", verb, source.Path),
+				})
+				continue
+			}
+		}
+		if diff.ChecksumAfter == "" {
+			_, ok := afters[diff.ChecksumBefore]
+			if ok {
+				continue
+			}
+		}
 		if time.Since(start) > diffTimeoutSeconds*time.Second {
 			msg := fmt.Sprintf(`
 
@@ -466,16 +498,7 @@ func extendDiff(
 				k++
 			}
 			for i := 0; i < 3; i++ {
-				lines = append(lines, BlameLine{
-					&ellipsisCommit,
-					0,
-					&ellipsisCommit,
-					//blankHash,
-					0,
-					0,
-					0,
-					"",
-				})
+				lines = append(lines, ellipsisLine)
 				content_lines = append(content_lines, "")
 			}
 		}
@@ -628,9 +651,27 @@ func col(s string) string {
 }
 
 var (
-	blankCommit       = blameworthy.Commit{"", col(""), 0, nil}
+	blankCommit = blameworthy.Commit{"", col(""), 0, nil}
+	blankLine   = BlameLine{
+		&blankCommit,
+		0,
+		&blankCommit,
+		0,
+		0,
+		0,
+		"",
+	}
 	stillExistsCommit = blameworthy.Commit{"", col("(still exists)"), 0, nil}
 	ellipsisCommit    = blameworthy.Commit{"", col("    ."), 0, nil}
+	ellipsisLine      = BlameLine{
+		&ellipsisCommit,
+		0,
+		&ellipsisCommit,
+		0,
+		0,
+		0,
+		"",
+	}
 )
 
 func orBlank(c *blameworthy.Commit) *blameworthy.Commit {

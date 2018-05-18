@@ -6,6 +6,10 @@ import (
 	"testing"
 )
 
+func mkDiff(commit *Commit, path string, hunks []Hunk) Diff {
+	return Diff{commit, path, "before", "after", hunks}
+}
+
 func TestStepping(t *testing.T) {
 	a1 := &Commit{"a1", "", 0, nil}
 	b2 := &Commit{"b2", "", 0, nil}
@@ -19,57 +23,57 @@ func TestStepping(t *testing.T) {
 		"[]",
 	}, {
 		File{
-			{a1, "test.txt", []Hunk{
+			mkDiff(a1, "test.txt", []Hunk{
 				{0, 0, 1, 3},
-			}},
+			}),
 		},
 		"[[{3 1 a1}]]",
 	}, {
 		File{
-			{a1, "test.txt", []Hunk{
+			mkDiff(a1, "test.txt", []Hunk{
 				{0, 0, 1, 3},
-			}},
-			{b2, "test.txt", []Hunk{
+			}),
+			mkDiff(b2, "test.txt", []Hunk{
 				{1, 0, 2, 2},
 				{2, 0, 5, 2},
-			}},
-			{c3, "test.txt", []Hunk{
+			}),
+			mkDiff(c3, "test.txt", []Hunk{
 				{1, 1, 1, 0},
 				{4, 2, 3, 1},
-			}},
+			}),
 		},
 		"[[{3 1 a1}]" +
 			" [{1 1 a1} {2 2 b2} {1 2 a1} {2 5 b2} {1 3 a1}]" +
 			" [{2 2 b2} {1 3 c3} {1 6 b2} {1 3 a1}]]",
 	}, {
 		File{
-			{a1, "test.txt", []Hunk{
+			mkDiff(a1, "test.txt", []Hunk{
 				{0, 0, 1, 3},
-			}},
-			{b2, "test.txt", []Hunk{
+			}),
+			mkDiff(b2, "test.txt", []Hunk{
 				{1, 1, 0, 0}, // remove 1st line
 				{2, 0, 2, 1}, // add new line 2
-			}},
+			}),
 		},
 		"[[{3 1 a1}] [{1 2 a1} {1 2 b2} {1 3 a1}]]",
 	}, {
 		File{
-			{a1, "test.txt", []Hunk{
+			mkDiff(a1, "test.txt", []Hunk{
 				{0, 0, 1, 3},
-			}},
-			{b2, "test.txt", []Hunk{
+			}),
+			mkDiff(b2, "test.txt", []Hunk{
 				{1, 3, 0, 0},
-			}},
+			}),
 		},
 		"[[{3 1 a1}] []]",
 	}, {
 		File{
-			{a1, "test.txt", []Hunk{
+			mkDiff(a1, "test.txt", []Hunk{
 				{0, 0, 1, 3},
-			}},
-			{b2, "test.txt", []Hunk{
+			}),
+			mkDiff(b2, "test.txt", []Hunk{
 				{0, 0, 4, 1},
-			}},
+			}),
 		},
 		"[[{3 1 a1}] [{3 1 a1} {1 4 b2}]]",
 	}}
@@ -107,25 +111,25 @@ func TestAtMethod(t *testing.T) {
 		expectedOutput string
 	}{{
 		File{
-			{a1, "test.txt", []Hunk{
+			mkDiff(a1, "test.txt", []Hunk{
 				{0, 0, 1, 3},
-			}},
+			}),
 		}, "" +
 			"BLAME [{a1 1} {a1 2} {a1 3}]" +
 			"FUTURE [{ 1} { 2} { 3}]",
 	}, {
 		File{
-			{a1, "test.txt", []Hunk{
+			mkDiff(a1, "test.txt", []Hunk{
 				{0, 0, 1, 3},
-			}},
-			{b2, "test.txt", []Hunk{
+			}),
+			mkDiff(b2, "test.txt", []Hunk{
 				{1, 0, 2, 2},
 				{2, 0, 5, 2},
-			}},
-			{c3, "test.txt", []Hunk{
+			}),
+			mkDiff(c3, "test.txt", []Hunk{
 				{1, 1, 1, 0},
 				{4, 2, 3, 1},
-			}},
+			}),
 		}, "" +
 			"BLAME [{a1 1} {a1 2} {a1 3}]" +
 			"FUTURE [{c3 1} {c3 4} { 5}]" +
@@ -135,13 +139,13 @@ func TestAtMethod(t *testing.T) {
 			"FUTURE [{ 1} { 2} { 3} { 4} { 5}]",
 	}, {
 		File{
-			{a1, "test.txt", []Hunk{
+			mkDiff(a1, "test.txt", []Hunk{
 				{0, 0, 1, 3},
-			}},
-			{b2, "test.txt", []Hunk{
+			}),
+			mkDiff(b2, "test.txt", []Hunk{
 				{1, 1, 0, 0}, // remove 1st line
 				{2, 0, 2, 1}, // add new line 2
-			}},
+			}),
 		}, "" +
 			"BLAME [{a1 1} {a1 2} {a1 3}]" +
 			"FUTURE [{b2 1} { 1} { 3}]" +
@@ -149,12 +153,12 @@ func TestAtMethod(t *testing.T) {
 			"FUTURE [{ 1} { 2} { 3}]",
 	}, {
 		File{
-			{a1, "test.txt", []Hunk{
+			mkDiff(a1, "test.txt", []Hunk{
 				{0, 0, 1, 3},
-			}},
-			{b2, "test.txt", []Hunk{
+			}),
+			mkDiff(b2, "test.txt", []Hunk{
 				{1, 3, 0, 0},
-			}},
+			}),
 		}, "" +
 			"BLAME [{a1 1} {a1 2} {a1 3}]" +
 			"FUTURE [{b2 1} {b2 2} {b2 3}]" +
@@ -162,12 +166,12 @@ func TestAtMethod(t *testing.T) {
 			"FUTURE []",
 	}, {
 		File{
-			{a1, "test.txt", []Hunk{
+			mkDiff(a1, "test.txt", []Hunk{
 				{0, 0, 1, 3},
-			}},
-			{b2, "test.txt", []Hunk{
+			}),
+			mkDiff(b2, "test.txt", []Hunk{
 				{0, 0, 4, 1},
-			}},
+			}),
 		}, "" +
 			"BLAME [{a1 1} {a1 2} {a1 3}]" +
 			"FUTURE [{ 1} { 2} { 3}]" +
@@ -225,8 +229,8 @@ func TestPreviousAndNext(t *testing.T) {
 			nil,
 			map[string]File{
 				"README": {
-					Diff{b2, "test.txt", []Hunk{{0, 0, 1, 2}}},
-					Diff{d4, "test.txt", []Hunk{{2, 1, 2, 1}}},
+					mkDiff(b2, "test.txt", []Hunk{{0, 0, 1, 2}}),
+					mkDiff(d4, "test.txt", []Hunk{{2, 1, 2, 1}}),
 				},
 			},
 		},

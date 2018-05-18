@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="/assets/css/blame.css" />
+  <title>Commit {{.commitHash}} message</title>
+</head>
+<body class="wide"><div id="header">commit <b>{{.commitHash}}</b>
+{{with .data}}
+Author: {{.Author}}
+Date: {{.Date}}
+
+<b>{{.Subject}}</b>
+
+{{.Body}}
+{{end}}
+</body>
+</html>

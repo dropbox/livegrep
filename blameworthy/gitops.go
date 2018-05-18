@@ -19,7 +19,7 @@ type GitHistory struct {
 }
 
 type Commit struct {
-	Hash   string
+	Hash   string // commit hash
 	Author string
 	Date   int32 // YYYYMMDD
 	Diffs  []*Diff
@@ -28,9 +28,11 @@ type Commit struct {
 type File []Diff
 
 type Diff struct {
-	Commit *Commit
-	Path   string
-	Hunks  []Hunk
+	Commit         *Commit
+	Path           string
+	ChecksumBefore string
+	ChecksumAfter  string
+	Hunks          []Hunk
 }
 
 type Hunk struct {
@@ -144,22 +146,30 @@ func ParseGitLog(input_stream io.ReadCloser) (*GitHistory, error) {
 
 	authors := map[string]string{} // dedup authors
 
-	var hash string
+	var commit_hash string
+	var checksum string
 	var commit *Commit
 	var diff *Diff
 
 	// A dash after the second "@@" is a signal from our command
 	// `strip-git-log` that it has removed the "+" and "-" lines
 	// that would have followed next.
-	re, _ := regexp.Compile(`@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@(-?)`)
+	index_re, _ := regexp.Compile(`^index ([0-9a-f]+)\.\.([0-9a-f]+)`)
+	hunk_re, _ := regexp.Compile(`^@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@(-?)`)
 
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "commit ") {
-			hash = line[7 : 7+HashLength]
-			history.Hashes = append(history.Hashes, hash)
-			commit = &Commit{hash, "", 0, nil}
-			commits[hash] = commit
+			commit_hash = line[7 : 7+HashLength]
+			history.Hashes = append(history.Hashes, commit_hash)
+			commit = &Commit{commit_hash, "", 0, nil}
+			commits[commit_hash] = commit
+		} else if strings.HasPrefix(line, "index ") {
+			groups := index_re.FindStringSubmatch(line)
+			if groups == nil {
+				continue
+			}
+			checksum = emptyZero(groups[2])
 		} else if strings.HasPrefix(line, "--- ") {
 			path := line[4:]
 			scanner.Scan() // read the "+++" line
@@ -167,28 +177,40 @@ func ParseGitLog(input_stream io.ReadCloser) (*GitHistory, error) {
 				line2 := scanner.Text()
 				path = line2[4:]
 			}
-			files[path] = append(files[path],
-				Diff{commit, path, []Hunk{}})
+			checksumBefore := ""
+			if files[path] != nil {
+				i := len(files[path]) - 1
+				checksumBefore = files[path][i].ChecksumAfter
+			}
+			files[path] = append(files[path], Diff{
+				commit, path,
+				checksumBefore, checksum,
+				[]Hunk{},
+			})
+			checksum = ""
 			diff = &files[path][len(files[path])-1]
 			commit.Diffs = append(commit.Diffs, diff)
 		} else if strings.HasPrefix(line, "@@ ") {
-			result_slice := re.FindStringSubmatch(line)
-			OldStart, _ := strconv.Atoi(result_slice[1])
-			OldLength := 1
-			if len(result_slice[2]) > 0 {
-				OldLength, _ = strconv.Atoi(result_slice[2])
+			groups := hunk_re.FindStringSubmatch(line)
+			if groups == nil {
+				continue
 			}
-			NewStart, _ := strconv.Atoi(result_slice[3])
+			OldStart, _ := strconv.Atoi(groups[1])
+			OldLength := 1
+			if len(groups[2]) > 0 {
+				OldLength, _ = strconv.Atoi(groups[2])
+			}
+			NewStart, _ := strconv.Atoi(groups[3])
 			NewLength := 1
-			if len(result_slice[4]) > 0 {
-				NewLength, _ = strconv.Atoi(result_slice[4])
+			if len(groups[4]) > 0 {
+				NewLength, _ = strconv.Atoi(groups[4])
 			}
 
 			diff.Hunks = append(diff.Hunks,
 				Hunk{OldStart, OldLength, NewStart, NewLength})
 
 			// Expect no unified diff if hunk header ends in "@@-"
-			is_stripped := len(result_slice[5]) > 0
+			is_stripped := len(groups[5]) > 0
 			if !is_stripped {
 				lines_to_skip := OldLength + NewLength
 				for i := 0; i < lines_to_skip; i++ {
@@ -210,4 +232,12 @@ func ParseGitLog(input_stream io.ReadCloser) (*GitHistory, error) {
 		}
 	}
 	return &history, scanner.Err()
+}
+
+// Substitute the empty string for an all-zero git hash.
+func emptyZero(hash string) string {
+	if strings.Count(hash, "0") == len(hash) {
+		return ""
+	}
+	return hash
 }

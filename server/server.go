@@ -29,6 +29,7 @@ type Templates struct {
 	FileView,
 	BlameDiff,
 	BlameFile,
+	BlameMessage,
 	LogFile,
 	About *template.Template
 	OpenSearch *texttemplate.Template `template:"opensearch.xml"`
@@ -243,11 +244,7 @@ func (s *server) ServeBlame(ctx context.Context, w http.ResponseWriter, r *http.
 		http.Redirect(w, r, url, 307)
 		return
 	}
-	//commitHash := rest[i+1:]
 
-	//fmt.Print(repoName, " ", hash, " ", path, "\n")
-
-	isDiff := false // TODO: remove
 	data := BlameData{}
 	resolveCommit(repo, hash, path, &data)
 	if data.CommitHash != hash {
@@ -257,15 +254,12 @@ func (s *server) ServeBlame(ctx context.Context, w http.ResponseWriter, r *http.
 		http.Redirect(w, r, destURL, 307)
 		return
 	}
-	err = buildBlameData(repo, hash, gitHistory, path, isDiff, &data)
+	err = buildBlameData(repo, hash, gitHistory, path, &data)
 	if err != nil {
 		http.Error(w, err.Error(), 404)
 		return
 	}
 	t := s.T.BlameFile
-	if isDiff {
-		t = s.T.BlameDiff
-	}
 	err = t.Execute(w, map[string]interface{}{
 		"cssTag": templates.LinkTag("stylesheet",
 			"/assets/css/blame.css", s.AssetHashes),
@@ -293,13 +287,20 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 		return
 	}
 	rest := pat.Tail("/diff/:repo/:hash/", r.URL.Path)
-	if len(rest) > 0 {
+	if len(rest) > 0 && rest != "message" {
 		diffRedirect(w, r, repoName, hash, rest)
 		return
 	}
 	data := DiffData{}
 	data2 := BlameData{}
 	resolveCommit(repo, hash, "", &data2)
+	if data2.CommitHash != hash {
+		pat1 := "/" + hash + "/"
+		pat2 := "/" + data2.CommitHash + "/"
+		destURL := strings.Replace(r.URL.Path, pat1, pat2, 1)
+		http.Redirect(w, r, destURL, 307)
+		return
+	}
 	data.CommitHash = data2.CommitHash
 	data.Author = data2.Author
 	data.Date = data2.Date
@@ -307,10 +308,20 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 	if len(data2.Body) > 0 {
 		data.Body = templates.TurnURLsIntoLinks(data2.Body)
 	}
-	// TODO: add redirect if they don't use our version of the commit hash
-	// if data.CommitHash != commitHash {
-	// 	http.Redirect(w, r, data.CommitHash, 307)
-	// }
+
+	if rest == "message" {
+		t := s.T.BlameMessage
+		err := t.Execute(w, map[string]interface{}{
+			"cssTag": templates.LinkTag("stylesheet",
+				"/assets/css/blame.css", s.AssetHashes),
+			"commitHash": hash,
+			"data":       data,
+		})
+		if err != nil {
+			stdlog.Print("Cannot render template: ", err)
+		}
+		return
+	}
 
 	err := buildDiffData(repo, hash, &data)
 	if err != nil {
