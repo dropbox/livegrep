@@ -29,6 +29,7 @@ type Templates struct {
 	FileView,
 	BlameDiff,
 	BlameFile,
+	BlameMessage,
 	LogFile,
 	About *template.Template
 	OpenSearch *texttemplate.Template `template:"opensearch.xml"`
@@ -286,7 +287,7 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 		return
 	}
 	rest := pat.Tail("/diff/:repo/:hash/", r.URL.Path)
-	if len(rest) > 0 {
+	if len(rest) > 0 && rest != "message" {
 		diffRedirect(w, r, repoName, hash, rest)
 		return
 	}
@@ -306,6 +307,20 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 	data.Subject = data2.Subject
 	if len(data2.Body) > 0 {
 		data.Body = templates.TurnURLsIntoLinks(data2.Body)
+	}
+
+	if rest == "message" {
+		t := s.T.BlameMessage
+		err := t.Execute(w, map[string]interface{}{
+			"cssTag": templates.LinkTag("stylesheet",
+				"/assets/css/blame.css", s.AssetHashes),
+			"commitHash": hash,
+			"data":       data,
+		})
+		if err != nil {
+			stdlog.Print("Cannot render template: ", err)
+		}
+		return
 	}
 
 	err := buildDiffData(repo, hash, &data)

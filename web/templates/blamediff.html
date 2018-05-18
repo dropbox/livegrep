@@ -4,13 +4,13 @@
   <link rel="stylesheet" href="/assets/css/blame.css" />
   <title>Commit {{.commitHash}}</title>
 </head>
-<body class="wide"><div id="header">                                        <b>THIS FEATURE IS IN ALPHA TESTING - PLEASE PING brhodes@ NOT #code-workflows :)</b>
+<body class="wide"><div id="header">                                        <b>THIS FEATURE IS IN ALPHA TESTING - ping brhodes@ with comments :)</b>
 
                                         commit <b>{{.commitHash}}</b>
 {{with .blame}}
 {{if .PreviousCommit}}«Previous commit{{else}}                {{end}}    {{if .NextCommit}}Next commit»{{else}}            {{end}}        Author: {{.Author}}
 {{if .PreviousCommit}}<a href="{{.PreviousCommit}}">{{.PreviousCommit}}</a>{{else}}                {{end}}    {{if .NextCommit}}<a href="{{.NextCommit}}">{{.NextCommit}}</a>{{else}}                {{end}}    Date: {{.Date}}
-                                        “{{.Subject}}”{{if .Body}}<span class="commit-message"> <b>Full commit message»</b><div class="commit-message-body">{{.Body}}</div></span>{{end}}
+                                        “{{.Subject}}”{{if .Body}} <a href="message"><b>Full commit message»</b></a>{{end}}
 
 Line added by:      Line deleted by:</div><div class="rtl"><div id="content">{{range .FileDiffs}}
 <b>================ <a href="/blame/{{$.repo.Name}}/{{$.commitHash}}/{{.Path}}/">{{.Path}}</a> ================</b>
