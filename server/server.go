@@ -243,11 +243,7 @@ func (s *server) ServeBlame(ctx context.Context, w http.ResponseWriter, r *http.
 		http.Redirect(w, r, url, 307)
 		return
 	}
-	//commitHash := rest[i+1:]
 
-	//fmt.Print(repoName, " ", hash, " ", path, "\n")
-
-	isDiff := false // TODO: remove
 	data := BlameData{}
 	resolveCommit(repo, hash, path, &data)
 	if data.CommitHash != hash {
@@ -257,15 +253,12 @@ func (s *server) ServeBlame(ctx context.Context, w http.ResponseWriter, r *http.
 		http.Redirect(w, r, destURL, 307)
 		return
 	}
-	err = buildBlameData(repo, hash, gitHistory, path, isDiff, &data)
+	err = buildBlameData(repo, hash, gitHistory, path, &data)
 	if err != nil {
 		http.Error(w, err.Error(), 404)
 		return
 	}
 	t := s.T.BlameFile
-	if isDiff {
-		t = s.T.BlameDiff
-	}
 	err = t.Execute(w, map[string]interface{}{
 		"cssTag": templates.LinkTag("stylesheet",
 			"/assets/css/blame.css", s.AssetHashes),

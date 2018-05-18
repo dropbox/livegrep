@@ -183,7 +183,6 @@ func buildBlameData(
 	commitHash string,
 	gitHistory *blameworthy.GitHistory,
 	path string,
-	isDiff bool,
 	data *BlameData,
 ) error {
 	start := time.Now()
