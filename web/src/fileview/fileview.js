@@ -367,6 +367,11 @@ function init(initData) {
     });
 
     initializeActionButtons($('.header .header-actions'));
+
+    // Syntax highlighting.
+    setTimeout(function() {
+      require('prism');
+    }, 1);
   }
 
   // The native browser handling of hashes in the location is to scroll
