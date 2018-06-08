@@ -101,9 +101,11 @@ func (s *server) ServeSearch(ctx context.Context, w http.ResponseWriter, r *http
 		http.Error(w, err.Error(), 500)
 		return
 	}
+        nonce := r.Header.Get("X-PP-CSP-Nonce")  // "" if absent
+        fmt.Print(nonce, "\n")
 	s.renderPage(w, &page{
 		Title:         "code search",
-                ScriptNonce:   "",
+                ScriptNonce:   nonce,
 		ScriptName:    "codesearch",
 		ScriptData:    script_data,
 		IncludeHeader: true,
