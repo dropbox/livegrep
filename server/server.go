@@ -101,11 +101,10 @@ func (s *server) ServeSearch(ctx context.Context, w http.ResponseWriter, r *http
 		http.Error(w, err.Error(), 500)
 		return
 	}
-        nonce := r.Header.Get("X-PP-CSP-Nonce")  // "" if absent
-        fmt.Print(nonce, "\n")
+	nonce := r.Header.Get("X-PP-CSP-Nonce") // "" if absent
 	s.renderPage(w, &page{
 		Title:         "code search",
-                ScriptNonce:   nonce,
+		ScriptNonce:   nonce,
 		ScriptName:    "codesearch",
 		ScriptData:    script_data,
 		IncludeHeader: true,
@@ -150,7 +149,7 @@ func (s *server) ServeFile(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 	s.renderPage(w, &page{
 		Title:         data.PathSegments[len(data.PathSegments)-1].Name,
-                ScriptNonce:   "",
+		ScriptNonce:   "",
 		ScriptName:    "fileview",
 		ScriptData:    script_data,
 		IncludeHeader: false,
