@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	stdlog "log"
 	"net/http"
 	"path"
 	"strconv"
@@ -23,16 +22,15 @@ import (
 	"github.com/livegrep/livegrep/server/templates"
 )
 
-type Templates struct {
-	Layout,
-	Index,
-	FileView,
-	BlameDiff,
-	BlameFile,
-	BlameMessage,
-	LogFile,
-	About *template.Template
-	OpenSearch *texttemplate.Template `template:"opensearch.xml"`
+type page struct {
+	Title         string
+	ScriptNonce   string
+	ScriptName    string
+	ScriptData    interface{}
+	IncludeHeader bool
+	Data          interface{}
+	Config        *config.Config
+	AssetHashes   map[string]string
 }
 
 type server struct {
@@ -41,7 +39,8 @@ type server struct {
 	bkOrder     []string
 	repos       map[string]config.RepoConfig
 	inner       http.Handler
-	T           Templates
+	Templates   map[string]*template.Template
+	OpenSearch  *texttemplate.Template
 	AssetHashes map[string]string
 	Layout      *template.Template
 
@@ -49,10 +48,17 @@ type server struct {
 }
 
 func (s *server) loadTemplates() {
+	s.Templates = make(map[string]*template.Template)
+	err := templates.LoadTemplates(s.config.DocRoot, s.Templates)
+	if err != nil {
+		panic(fmt.Sprintf("loading templates: %v", err))
+	}
+
+	p := s.config.DocRoot + "/templates/opensearch.xml"
+	s.OpenSearch = texttemplate.Must(texttemplate.ParseFiles(p))
+
 	s.AssetHashes = make(map[string]string)
-	err := templates.Load(
-		path.Join(s.config.DocRoot, "templates"),
-		&s.T,
+	err = templates.LoadAssetHashes(
 		path.Join(s.config.DocRoot, "hashes.txt"),
 		s.AssetHashes)
 	if err != nil {
@@ -86,29 +92,28 @@ func (s *server) ServeSearch(ctx context.Context, w http.ResponseWriter, r *http
 		}
 		bk.I.Unlock()
 	}
-	page_data := &struct {
-		Backends   []*Backend
-		SampleRepo string
-	}{backends, sampleRepo}
+
 	script_data := &struct {
 		RepoUrls           map[string]map[string]string `json:"repo_urls"`
 		InternalViewRepos  map[string]config.RepoConfig `json:"internal_view_repos"`
 		DefaultSearchRepos []string                     `json:"default_search_repos"`
 	}{urls, s.repos, s.config.DefaultSearchRepos}
 
-	body, err := executeTemplate(s.T.Index, page_data)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
 	nonce := r.Header.Get("X-PP-CSP-Nonce") // "" if absent
-	s.renderPage(w, &page{
+
+	s.renderPage(ctx, w, "index.html", &page{
 		Title:         "code search",
 		ScriptNonce:   nonce,
 		ScriptName:    "codesearch",
 		ScriptData:    script_data,
 		IncludeHeader: true,
-		Body:          template.HTML(body),
+		Data: struct {
+			Backends   []*Backend
+			SampleRepo string
+		}{
+			Backends:   backends,
+			SampleRepo: sampleRepo,
+		},
 	})
 }
 
@@ -142,18 +147,13 @@ func (s *server) ServeFile(ctx context.Context, w http.ResponseWriter, r *http.R
 		Commit   string            `json:"commit"`
 	}{repo, commit}
 
-	body, err := executeTemplate(s.T.FileView, data)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	s.renderPage(w, &page{
+	s.renderPage(ctx, w, "fileview.html", &page{
 		Title:         data.PathSegments[len(data.PathSegments)-1].Name,
 		ScriptNonce:   "",
 		ScriptName:    "fileview",
 		ScriptData:    script_data,
 		IncludeHeader: false,
-		Body:          template.HTML(body),
+		Data:          data,
 	})
 }
 
@@ -190,16 +190,11 @@ func (s *server) ServeLog(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	err = s.T.LogFile.Execute(w, map[string]interface{}{
-		"cssTag": templates.LinkTag("stylesheet",
-			"/assets/css/blame.css", s.AssetHashes),
+	s.renderPageCasual(ctx, w, "logfile.html", map[string]interface{}{
 		"path":    path,
 		"repo":    repo,
 		"logData": logData,
 	})
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-	}
 }
 
 func (s *server) parseBlameURL(r *http.Request) (string, string, error) {
@@ -262,19 +257,13 @@ func (s *server) ServeBlame(ctx context.Context, w http.ResponseWriter, r *http.
 		http.Error(w, err.Error(), 404)
 		return
 	}
-	t := s.T.BlameFile
-	err = t.Execute(w, map[string]interface{}{
-		"cssTag": templates.LinkTag("stylesheet",
-			"/assets/css/blame.css", s.AssetHashes),
+	s.renderPageCasual(ctx, w, "blamefile.html", map[string]interface{}{
 		"repo":       repo,
 		"path":       path,
 		"commitHash": hash,
 		"blame":      data,
 		"content":    data.Content,
 	})
-	if err != nil {
-		stdlog.Print("Cannot render template: ", err)
-	}
 }
 
 func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -313,16 +302,10 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if rest == "message" {
-		t := s.T.BlameMessage
-		err := t.Execute(w, map[string]interface{}{
-			"cssTag": templates.LinkTag("stylesheet",
-				"/assets/css/blame.css", s.AssetHashes),
+		s.renderPageCasual(ctx, w, "blamemessage.html", map[string]interface{}{
 			"commitHash": hash,
 			"data":       data,
 		})
-		if err != nil {
-			stdlog.Print("Cannot render template: ", err)
-		}
 		return
 	}
 
@@ -332,29 +315,18 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 		return
 	}
 
-	err = s.T.BlameDiff.Execute(w, map[string]interface{}{
-		"cssTag": templates.LinkTag("stylesheet",
-			"/assets/css/blame.css", s.AssetHashes),
+	s.renderPageCasual(ctx, w, "blamediff.html", map[string]interface{}{
 		"repo":       repo,
 		"path":       "NONE",
 		"commitHash": hash,
 		"blame":      data,
 	})
-	if err != nil {
-		stdlog.Print("Cannot render template: ", err)
-	}
 }
 
 func (s *server) ServeAbout(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	body, err := executeTemplate(s.T.About, nil)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	s.renderPage(w, &page{
+	s.renderPage(ctx, w, "about.html", &page{
 		Title:         "about",
 		IncludeHeader: true,
-		Body:          template.HTML(body),
 	})
 }
 
@@ -436,14 +408,57 @@ func (s *server) ServeOpensearch(ctx context.Context, w http.ResponseWriter, r *
 		}
 	}
 
-	body, err := executeTemplate(s.T.OpenSearch, data)
+	templateName := "opensearch.xml"
+	w.Header().Set("Content-Type", "application/xml")
+	err := s.OpenSearch.ExecuteTemplate(w, templateName, data)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		log.Printf(ctx, "Error rendering %s: %s", templateName, err)
+		return
+	}
+}
+
+func (s *server) renderPage(ctx context.Context, w io.Writer, templateName string, pageData *page) {
+	t, ok := s.Templates[templateName]
+	if !ok {
+		log.Printf(ctx, "Error: no template named %v", templateName)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/xml")
-	w.Write(body)
+	pageData.Config = s.config
+	pageData.AssetHashes = s.AssetHashes
+
+	err := t.ExecuteTemplate(w, templateName, pageData)
+	if err != nil {
+		log.Printf(ctx, "Error rendering %v: %s", templateName, err)
+		return
+	}
+}
+
+func (s *server) renderPageCasual(ctx context.Context, w io.Writer, templateName string, data map[string]interface{}) {
+	t, ok := s.Templates[templateName]
+	if !ok {
+		log.Printf(ctx, "Error: no template named %v", templateName)
+		return
+	}
+
+	// pageData.Config = s.config
+	// pageData.AssetHashes = s.AssetHashes
+
+	err := t.ExecuteTemplate(w, templateName, data)
+	if err != nil {
+		log.Printf(ctx, "Error rendering %v: %s", templateName, err)
+		return
+	}
+}
+
+type reloadHandler struct {
+	srv   *server
+	inner http.Handler
+}
+
+func (h *reloadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.srv.loadTemplates()
+	h.inner.ServeHTTP(w, r)
 }
 
 type handler func(c context.Context, w http.ResponseWriter, r *http.Request)
@@ -521,12 +536,7 @@ func New(cfg *config.Config) (http.Handler, error) {
 	var h http.Handler = m
 
 	if cfg.Reload {
-		h = templates.ReloadHandler(
-			path.Join(srv.config.DocRoot, "templates"),
-			&srv.T,
-			path.Join(srv.config.DocRoot, "hashes.txt"),
-			srv.AssetHashes,
-			h)
+		h = &reloadHandler{srv, h}
 	}
 
 	mux := http.NewServeMux()

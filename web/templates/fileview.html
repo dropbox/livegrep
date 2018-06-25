@@ -1,3 +1,7 @@
+{{template "layout" .}}
+
+{{define "body"}}
+{{with .Data}}
 <section class="file-viewer">
   <header class="header">
     <nav class="header-title">
@@ -100,3 +104,5 @@
     </div>
   </section>
 </section>
+{{end}}
+{{end}}
