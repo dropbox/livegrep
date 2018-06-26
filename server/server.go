@@ -444,12 +444,14 @@ func (s *server) renderPageCasual(ctx context.Context, w io.Writer, r *http.Requ
 		return
 	}
 
+	data["AssetHashes"] = s.AssetHashes
+
 	nonce := getNonce(r)
 
-	data["Nonce"] = ""
 	if nonce != "" {
-		data["Nonce"] = template.HTMLAttr(fmt.Sprintf(` nonce="%s"`, nonce))
+		nonce = fmt.Sprintf(` nonce="%s"`, nonce)
 	}
+	data["Nonce"] = template.HTMLAttr(nonce)
 
 	err := t.ExecuteTemplate(w, templateName, data)
 	if err != nil {

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <link{{.Nonce}} rel="stylesheet" href="/assets/css/blame.css" />
+  {{linkTag .Nonce "stylesheet" "/assets/css/blame.css" .AssetHashes}}
   <title>Commit {{.commitHash}} message</title>
 </head>
 <body class="wide"><div id="header">commit <b>{{.commitHash}}</b>
