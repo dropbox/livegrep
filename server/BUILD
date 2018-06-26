@@ -11,7 +11,6 @@ go_library(
         "json.go",
         "query.go",
         "server.go",
-        "templates.go",
     ],
     data = [
         "//web:asset_hashes",

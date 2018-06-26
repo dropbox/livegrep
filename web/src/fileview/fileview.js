@@ -1,9 +1,5 @@
 $ = require('jquery');
 
-// TODO: would be nicer to load hljs asynchronously, to show text as early as
-// possible
-hljs = require('highlight.js');
-
 var KeyCodes = {
   ESCAPE: 27,
   ENTER: 13,
@@ -371,6 +367,11 @@ function init(initData) {
     });
 
     initializeActionButtons($('.header .header-actions'));
+
+    // Syntax highlighting.
+    setTimeout(function() {
+      require('prism');
+    }, 1);
   }
 
   // The native browser handling of hashes in the location is to scroll
@@ -382,7 +383,6 @@ function init(initData) {
   setTimeout(function() {
     lineNumberContainer.css({display: 'block'});
     initializePage();
-    setTimeout(function() { hljs.highlightBlock($('#source-code')[0]); }, 0);
   }, 1);
 }
 
