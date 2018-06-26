@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	texttemplate "text/template"
@@ -423,7 +424,7 @@ func (s *server) renderPage(ctx context.Context, w io.Writer, r *http.Request, t
 	pageData.Config = s.config
 	pageData.AssetHashes = s.AssetHashes
 
-	nonce := "" // custom nonce computation can go here
+	nonce := getNonce(r)
 
 	if nonce != "" {
 		pageData.Nonce = template.HTMLAttr(fmt.Sprintf(` nonce="%s"`, nonce))
@@ -451,6 +452,20 @@ func (s *server) renderPageCasual(ctx context.Context, w io.Writer, templateName
 		log.Printf(ctx, "Error rendering %v: %s", templateName, err)
 		return
 	}
+}
+
+func getNonce(r *http.Request) string {
+	nonce := r.Header.Get("X-PP-CSP-Nonce")
+	if nonce == "" {
+		return ""
+	}
+	// Since we copy this directly into HTML, verify its alphabet.
+	// https://www.w3.org/TR/CSP3/#grammardef-base64-value
+	ok, _ := regexp.MatchString(`^[-A-Za-z0-9+/_=]+$`, nonce)
+	if !ok {
+		return ""
+	}
+	return nonce
 }
 
 type reloadHandler struct {
