@@ -15,7 +15,4 @@ Viewing history for <b><a href="/view/{{.repo.Name}}/{{.path}}">{{.path}}</a></b
 {{if (ne .logData.PrevOffset -1)}}<a href="/log/{{.repo.Name}}/{{.path}}?offset={{.logData.PrevOffset}}">«</a>{{else}} {{end}}   {{if (ne .logData.NextOffset -1)}}<a href="/log/{{.repo.Name}}/{{.path}}?offset={{.logData.NextOffset}}">»</a>{{end}}
 
 </body>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/2.1.4/js.cookie.min.js" integrity="sha256-NjbogQqosWgor0UBdCURR5dzcvAgHnfUZMcZ8RCwkk8=" crossorigin="anonymous"></script>
-<script src="/assets/raw-js/blame.js"></script>
 </html>

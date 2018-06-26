@@ -187,7 +187,7 @@ func (s *server) ServeLog(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	s.renderPageCasual(ctx, w, "logfile.html", map[string]interface{}{
+	s.renderPageCasual(ctx, w, r, "logfile.html", map[string]interface{}{
 		"path":    path,
 		"repo":    repo,
 		"logData": logData,
@@ -254,7 +254,7 @@ func (s *server) ServeBlame(ctx context.Context, w http.ResponseWriter, r *http.
 		http.Error(w, err.Error(), 404)
 		return
 	}
-	s.renderPageCasual(ctx, w, "blamefile.html", map[string]interface{}{
+	s.renderPageCasual(ctx, w, r, "blamefile.html", map[string]interface{}{
 		"repo":       repo,
 		"path":       path,
 		"commitHash": hash,
@@ -299,7 +299,7 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if rest == "message" {
-		s.renderPageCasual(ctx, w, "blamemessage.html", map[string]interface{}{
+		s.renderPageCasual(ctx, w, r, "blamemessage.html", map[string]interface{}{
 			"commitHash": hash,
 			"data":       data,
 		})
@@ -312,7 +312,7 @@ func (s *server) ServeDiff(ctx context.Context, w http.ResponseWriter, r *http.R
 		return
 	}
 
-	s.renderPageCasual(ctx, w, "blamediff.html", map[string]interface{}{
+	s.renderPageCasual(ctx, w, r, "blamediff.html", map[string]interface{}{
 		"repo":       repo,
 		"path":       "NONE",
 		"commitHash": hash,
@@ -437,15 +437,19 @@ func (s *server) renderPage(ctx context.Context, w io.Writer, r *http.Request, t
 	}
 }
 
-func (s *server) renderPageCasual(ctx context.Context, w io.Writer, templateName string, data map[string]interface{}) {
+func (s *server) renderPageCasual(ctx context.Context, w io.Writer, r *http.Request, templateName string, data map[string]interface{}) {
 	t, ok := s.Templates[templateName]
 	if !ok {
 		log.Printf(ctx, "Error: no template named %v", templateName)
 		return
 	}
 
-	// pageData.Config = s.config
-	// pageData.AssetHashes = s.AssetHashes
+	nonce := getNonce(r)
+
+	data["Nonce"] = ""
+	if nonce != "" {
+		data["Nonce"] = template.HTMLAttr(fmt.Sprintf(` nonce="%s"`, nonce))
+	}
 
 	err := t.ExecuteTemplate(w, templateName, data)
 	if err != nil {
