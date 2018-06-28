@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <link{{.Nonce}} rel="stylesheet" href="/assets/css/blame.css" />
+  {{linkTag .Nonce "stylesheet" "/assets/css/blame.css" .AssetHashes}}
   <title>File {{.path}} at {{.commitHash}}</title>
 </head>
 <body class="blamefile"><div id="header">                                        <b>THIS FEATURE IS IN ALPHA TESTING - ping brhodes@ with comments</b>
