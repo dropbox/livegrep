@@ -105,7 +105,8 @@
   </section>
 </section>
 <script>
-  window.filePath = {{.FilePath}}
+  window.filePath = {{.FilePath}};
+  window.hasLangServer = Boolean({{.HasLangServer}});
 </script>
 <style>
 .hovering {

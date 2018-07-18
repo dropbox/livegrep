@@ -485,11 +485,15 @@ function init(initData) {
     });
 
     $(document).on('click', function (event) {
-      triggerJumpToDef(event);
+      if (window.hasLangServer) {
+        triggerJumpToDef(event);
+      }
     });
 
     $('#source-code').on('mousemove', function (event) {
-      onHover(event.clientX, event.clientY);
+      if (window.hasLangServer) {
+        onHover(event.clientX, event.clientY);
+      }
     });
 
     $(document).mouseup(function() {
