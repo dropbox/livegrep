@@ -503,61 +503,53 @@ func (h *reloadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) ServeJumpToDef(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	response, err := s.jumpToDef(r.URL.Query())
+	docPositionParams, repo, err := s.parseDocPositionParams(r.URL.Query())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		writeError(ctx, w, 400, "bad_arguments", err.Error())
 		return
 	}
-	replyJSON(ctx, w, 200, response)
-}
 
-func (s *server) jumpToDef(urlParams url.Values) (*GotoDefResponse, error) {
-	allParamNames := []string{filePathParamName, repoNameParamName, rowParamName, colParamName}
-	params, err := urlQueryToMap(urlParams, allParamNames)
-	if err != nil {
-		return nil, err
-	}
-	docPositionParams, err := s.parseDocPositionParams(params)
-	if err != nil {
-		return nil, err
-	}
-	repoName := params[repoNameParamName]
-	repo, err := getRepoByName(s.config.IndexConfig.Repositories, repoName)
-	if err != nil {
-		return nil, err
-	}
-	l := langserver.GetLangServerFromFileExt(repo, docPositionParams.TextDocument.URI)
+	l := langserver.ForFile(repo, docPositionParams.TextDocument.URI)
 	langServer := s.langsrv[l.Address]
 	if langServer == nil {
-		return nil, errors.New(fmt.Sprintf("no langserver running at address %s", l.Address))
+		// no language server
+		writeError(ctx, w, 404, "not_found", err.Error())
+		return
 	}
-	locations, err := langServer.JumpToDef(docPositionParams)
+	locations, err := langServer.JumpToDef(ctx, docPositionParams)
 	if err != nil {
-		return nil, err
+		writeError(ctx, w, 500, "lsp_error", err.Error())
+		return
 	}
 
-	if len(locations) == 0 {
-		return nil, errors.New("no locations for symbol")
+	retUrl := ""
+
+	if len(locations) > 0 {
+
+		location := locations[0]
+		targetPath := strings.TrimPrefix(location.URI, "file://")
+		// Add 1 because URL is 1-indexed and language server is 0-indexed.
+		lineNum := location.TextRange.Start.Line + 1
+		if !strings.HasPrefix(targetPath, repo.Path) {
+			writeError(ctx, w, 400, "out_of_repo", "locations outside repo not supported")
+			return
+		}
+
+		relPath, err := filepath.Rel(repo.Path, targetPath)
+		if err != nil {
+			writeError(ctx, w, 500, "invalid_path", err.Error())
+			return
+		}
+
+		retUrl = fmt.Sprintf("/view/%s/%s#L%d", repo.Name, relPath, lineNum)
 	}
 
-	location := locations[0]
-
-	targetPath := strings.TrimPrefix(location.URI, "file://")
-	// Add 1 because URL is 1-indexed and language server is 0-indexed.
-	lineNum := location.TextRange.Start.Line + 1
-	if !strings.HasPrefix(targetPath, repo.Path) {
-		return nil, errors.New("cross-repo definitions aren't supported")
-	}
-	relPath, err := filepath.Rel(repo.Path, targetPath)
-	if err != nil {
-		return nil, err
-	}
-	return &GotoDefResponse{
-		URL: fmt.Sprintf("/view/%s/%s#L%d", repoName, relPath, lineNum),
-	}, nil
+	replyJSON(ctx, w, 200, &GotoDefResponse{
+		URL: retUrl,
+	})
 }
 
-func getRepoByName(repos []config.RepoConfig, repoName string) (*config.RepoConfig, error) {
+func findRepo(repos []config.RepoConfig, repoName string) (*config.RepoConfig, error) {
 	for _, repo := range repos {
 		if repo.Name == repoName {
 			return &repo, nil
@@ -566,47 +558,44 @@ func getRepoByName(repos []config.RepoConfig, repoName string) (*config.RepoConf
 	return nil, errors.New(fmt.Sprintf("repo with name %s not found", repoName))
 }
 
-func urlQueryToMap(queryParams url.Values, requiredParamNames []string) (map[string]string, error) {
-	result := make(map[string]string, len(requiredParamNames))
-	for _, paramName := range requiredParamNames {
-		if len(queryParams[paramName]) == 0 {
-			return nil, errors.New(fmt.Sprintf("param %s is missing, provided: %+v",
-				paramName, queryParams))
-		}
-		if len(queryParams[paramName]) != 1 {
-			return nil, errors.New(fmt.Sprintf("param %s is provided %d times, need 1",
-				paramName, len(queryParams[paramName])))
-		}
-		result[paramName] = queryParams[paramName][0]
-	}
-	return result, nil
-}
+func (s *server) parseDocPositionParams(params url.Values) (*langserver.TextDocumentPositionParams, *config.RepoConfig, error) {
 
-func (s *server) parseDocPositionParams(params map[string]string) (*langserver.TextDocumentPositionParams, error) {
-	// Assume the params are already validated.
-	row, err := strconv.Atoi(params[rowParamName])
-	if err != nil {
-		return nil, err
+	row, column, repo, fpath :=
+		params.Get(rowParamName),
+		params.Get(colParamName),
+		params.Get(repoNameParamName),
+		params.Get(filePathParamName)
+
+	if row == "" || column == "" || repo == "" || fpath == "" {
+		return nil, nil, errors.New("row, column, repo, and filepath need to be set")
 	}
-	col, err := strconv.Atoi(params[colParamName])
+
+	rowN, err := strconv.Atoi(row)
 	if err != nil {
-		return nil, err
+		return nil, nil, errors.New("row param needs to be a number, got " + row)
 	}
-	repo, err := getRepoByName(s.config.IndexConfig.Repositories, params[repoNameParamName])
+
+	colN, err := strconv.Atoi(column)
 	if err != nil {
-		return nil, err
+		return nil, nil, errors.New("column param needs to be a number, got " + column)
+	}
+
+	repoConfig, err := findRepo(s.config.IndexConfig.Repositories, repo)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	positionParams := &langserver.TextDocumentPositionParams{
 		TextDocument: langserver.TextDocumentIdentifier{
-			URI: buildURI(repo.Path, params[filePathParamName]),
+			URI: buildURI(repoConfig.Path, fpath),
 		},
 		Position: langserver.Position{
-			Line:      row,
-			Character: col,
+			Line:      rowN,
+			Character: colN,
 		},
 	}
-	return positionParams, nil
+
+	return positionParams, repoConfig, nil
 }
 
 func buildURI(repoPath string, relativeFilePath string) string {
@@ -614,41 +603,34 @@ func buildURI(repoPath string, relativeFilePath string) string {
 }
 
 func (s *server) ServeHover(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	response, err := s.hover(r.URL.Query())
+
+	docPositionParams, repo, err := s.parseDocPositionParams(r.URL.Query())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		writeError(ctx, w, 400, "bad_arguments", err.Error())
 		return
 	}
-	replyJSON(ctx, w, 200, response)
-}
 
-func (s *server) hover(urlParams url.Values) (*langserver.Range, error) {
-	allParamNames := []string{filePathParamName, repoNameParamName, rowParamName, colParamName}
-	params, err := urlQueryToMap(urlParams, allParamNames)
-	if err != nil {
-		return nil, err
+	l := langserver.ForFile(repo, docPositionParams.TextDocument.URI)
+	if l == nil {
+		// no language server
+		writeError(ctx, w, 404, "not_found", err.Error())
+		return
 	}
-	docPositionParams, err := s.parseDocPositionParams(params)
-	if err != nil {
-		return nil, err
-	}
-	repo, err := getRepoByName(s.config.IndexConfig.Repositories, params[repoNameParamName])
-	if err != nil {
-		return nil, err
-	}
-	l := langserver.GetLangServerFromFileExt(repo, docPositionParams.TextDocument.URI)
+
 	langServer := s.langsrv[l.Address]
 	if langServer == nil {
-		return nil, errors.New(fmt.Sprintf("no langserver running at address %s", l.Address))
+		// no language server
+		writeError(ctx, w, 404, "not_found", err.Error())
+		return
 	}
-	hoverResponse, err := langServer.Hover(docPositionParams)
+
+	hoverResponse, err := langServer.Hover(ctx, docPositionParams)
 	if err != nil {
-		return nil, err
+		writeError(ctx, w, 500, "lsp_error", err.Error())
+		return
 	}
-	if hoverResponse.TextRange == (langserver.Range{}) {
-		return nil, errors.New("no text range provided")
-	}
-	return &hoverResponse.TextRange, nil
+
+	replyJSON(ctx, w, 200, &hoverResponse.TextRange)
 }
 
 type handler func(c context.Context, w http.ResponseWriter, r *http.Request)
@@ -702,28 +684,6 @@ func New(cfg *config.Config) (http.Handler, error) {
 		srv.bkOrder = append(srv.bkOrder, be.Id)
 	}
 
-	for _, r := range srv.config.IndexConfig.Repositories {
-		for _, langServer := range r.LangServers {
-			client, err := langserver.CreateLangServerClient(langServer.Address)
-			if err != nil {
-				return nil, err
-			}
-
-			initParams := langserver.InitializeParams{
-				ProcessId:        nil,
-				OriginalRootPath: r.Path,
-				RootUri:          "file://" + r.Path,
-				Capabilities:     langserver.ClientCapabilities{},
-			}
-			_, err = client.Initialize(initParams)
-			if err != nil {
-				return nil, err
-			}
-			srv.langsrv[langServer.Address] = client
-		}
-		srv.repos[r.Name] = r
-	}
-
 	m := pat.New()
 	m.Add("GET", "/log/:repo/", srv.Handler(srv.ServeLog))
 	m.Add("GET", "/blame/:repo/:hash/", srv.Handler(srv.ServeBlame))
@@ -755,6 +715,39 @@ func New(cfg *config.Config) (http.Handler, error) {
 	mux.Handle("/", h)
 
 	srv.inner = mux
+
+	ctx := context.Background()
+
+	for _, r := range srv.config.IndexConfig.Repositories {
+
+		for _, langServer := range r.LangServers {
+
+			client, err := langserver.NewClient(ctx, langServer.Address)
+
+			// a failing language server isn't fatal. We'd prefer to log these metrics.
+			if err != nil {
+				log.Printf(ctx, "%s", err.Error())
+			}
+
+			initParams := &langserver.InitializeParams{
+				ProcessId:        nil,
+				OriginalRootPath: r.Path,
+				RootUri:          "file://" + r.Path,
+				Capabilities:     langserver.ClientCapabilities{},
+			}
+
+			_, err = client.Initialize(ctx, initParams)
+
+			// a failing language server isn't fatal. We'd prefer to log these metrics.
+			if err != nil {
+				log.Printf(ctx, "%s", err.Error())
+			}
+
+			srv.langsrv[langServer.Address] = client
+		}
+
+		srv.repos[r.Name] = r
+	}
 
 	return srv, nil
 }

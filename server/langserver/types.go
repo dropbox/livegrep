@@ -1,5 +1,21 @@
 package langserver
 
+type ClientCapabilities struct{}
+
+type ServerCapabilities struct{}
+
+type InitializeParams struct {
+	ProcessId        *int               `json:"processId"`
+	OriginalRootPath string             `json:"originalRootPath"`
+	RootPath         string             `json:"rootPath"`
+	RootUri          string             `json:"rootUri"`
+	Capabilities     ClientCapabilities `json:"capabilities"`
+}
+
+type InitializeResult struct {
+	Capabilities ServerCapabilities `json:"capabilities"`
+}
+
 type SymbolInformation struct {
 	Name          string   `json:"name"`
 	Kind          int      `json:"kind"`

@@ -286,7 +286,7 @@ func buildFileData(relativePath string, repo config.RepoConfig, commit string) (
 		}
 	}
 
-	langServer := langserver.GetLangServerFromFileExt(&repo, cleanPath);
+	langServer := langserver.ForFile(&repo, cleanPath)
 
 	return &fileViewerContext{
 		FilePath:         cleanPath,

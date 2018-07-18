@@ -2,33 +2,17 @@ package langserver
 
 import (
 	"context"
-	"fmt"
-
 	"net"
 
 	"github.com/livegrep/livegrep/server/config"
+	"github.com/livegrep/livegrep/server/log"
 	"github.com/sourcegraph/jsonrpc2"
 	"path/filepath"
 	"time"
 )
 
-type ClientCapabilities struct{}
-
-type ServerCapabilities struct{}
-
-type InitializeParams struct {
-	ProcessId        *int               `json:"processId"`
-	OriginalRootPath string             `json:"originalRootPath"`
-	RootPath         string             `json:"rootPath"`
-	RootUri          string             `json:"rootUri"`
-	Capabilities     ClientCapabilities `json:"capabilities"`
-}
-
-type InitializeResult struct {
-	Capabilities ServerCapabilities `json:"capabilities"`
-}
-
-func GetLangServerFromFileExt(repo *config.RepoConfig, filePath string) *config.LangServer {
+// infers a language server for a given file. Picks only one.
+func ForFile(repo *config.RepoConfig, filePath string) *config.LangServer {
 	fileExt := filepath.Ext(filePath)
 	for _, langServer := range repo.LangServers {
 		for _, ext := range langServer.Extensions {
@@ -41,18 +25,16 @@ func GetLangServerFromFileExt(repo *config.RepoConfig, filePath string) *config.
 }
 
 type Client interface {
-	Initialize(params InitializeParams) (InitializeResult, error)
-	JumpToDef(params *TextDocumentPositionParams) ([]Location, error)
-	Hover(params *TextDocumentPositionParams) (HoverResponse, error)
+	Initialize(ctx context.Context, params *InitializeParams) (InitializeResult, error)
+	JumpToDef(ctx context.Context, params *TextDocumentPositionParams) ([]Location, error)
+	Hover(ctx context.Context, params *TextDocumentPositionParams) (HoverResponse, error)
 }
 
 type langServerClientImpl struct {
 	rpcClient *jsonrpc2.Conn
-	ctx       context.Context
 }
 
-func CreateLangServerClient(address string) (client Client, err error) {
-	ctx := context.Background()
+func NewClient(ctx context.Context, address string) (client Client, err error) {
 	codec := jsonrpc2.VSCodeObjectCodec{}
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
@@ -61,35 +43,37 @@ func CreateLangServerClient(address string) (client Client, err error) {
 	rpcConn := jsonrpc2.NewConn(ctx, jsonrpc2.NewBufferedStream(conn, codec), nil)
 	client = &langServerClientImpl{
 		rpcClient: rpcConn,
-		ctx:       ctx,
-	}
-	return client, nil
-}
-
-func (ls *langServerClientImpl) Initialize(params InitializeParams) (result InitializeResult, err error) {
-	err = ls.invoke("initialize", params, &result)
-	if err != nil {
-		ls.invoke("initialized", nil, nil)
 	}
 	return
 }
 
-func (ls *langServerClientImpl) JumpToDef(params *TextDocumentPositionParams) (result []Location, err error) {
-	err = ls.invoke("textDocument/definition", params, &result)
+func (ls *langServerClientImpl) Initialize(ctx context.Context, params *InitializeParams) (result InitializeResult, err error) {
+	err = ls.invoke(ctx, "initialize", params, &result)
+	if err != nil {
+		ls.invoke(ctx, "initialized", nil, nil)
+	}
+	return
+}
+
+func (ls *langServerClientImpl) JumpToDef(
+	ctx context.Context,
+	params *TextDocumentPositionParams,
+) (result []Location, err error) {
+	err = ls.invoke(ctx, "textDocument/definition", params, &result)
 	return
 }
 
 func (ls *langServerClientImpl) Hover(
+	ctx context.Context,
 	params *TextDocumentPositionParams,
 ) (result HoverResponse, err error) {
-	err = ls.invoke("textDocument/hover", params, result)
+	err = ls.invoke(ctx, "textDocument/hover", params, result)
 	return
 }
 
-func (ls *langServerClientImpl) invoke(method string, params interface{}, result interface{}) error {
+func (ls *langServerClientImpl) invoke(ctx context.Context, method string, params interface{}, result interface{}) error {
 	start := time.Now()
-	err := ls.rpcClient.Call(ls.ctx, method, params, &result)
-	fmt.Printf("%s returned in %s\nParams: %+v, Result: %+v, err: %+v\n", method, time.Since(start),
-		params, result, err)
+	err := ls.rpcClient.Call(ctx, method, params, &result)
+	log.Printf(ctx, "%s %s\nParams: %+v, Result: %+v, err: %+v\n", method, time.Since(start), params, result, err)
 	return err
 }
