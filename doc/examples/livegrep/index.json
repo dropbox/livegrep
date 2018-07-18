@@ -9,15 +9,7 @@
             ],
             "metadata": {
                 "url-pattern": "/view/{name}/{path}"
-            },
-            "lang_servers": [
-                {
-                    "address": "0.0.0.0:3141",
-                    "extensions": [
-                        ".go"
-                    ]
-                }
-            ]
+            }
         }
     ]
 }

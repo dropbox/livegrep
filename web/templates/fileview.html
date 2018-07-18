@@ -69,7 +69,6 @@
       {{with .FileContent}}
       <div class="file-content">
         <code id="source-code" class="code-pane language-{{.Language}}">{{.Content}}</code>
-          <!-- {{$contentLines := split .Content "\n" }}{{range $index, $line := $contentLines}}<span data-row="{{toLineNum $index}}">{{$line}}</br></span>{{end}} -->
         <!--
         NOTE: The reason the line number links are after the code block above is because
         they take a significant amount of time to render for large files. If we keep
@@ -107,7 +106,6 @@
 </section>
 <script>
   window.filePath = {{.FilePath}}
-  console.log(window.filePath);
 </script>
 <style>
 .hovering {

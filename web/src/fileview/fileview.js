@@ -3,9 +3,7 @@ $ = require('jquery');
 var KeyCodes = {
   ESCAPE: 27,
   ENTER: 13,
-  SLASH_OR_QUESTION_MARK: 191,
-  COMMAND: 91,
-  CONTROL: 17,
+  SLASH_OR_QUESTION_MARK: 191
 };
 
 function getSelectedText() {
@@ -286,15 +284,13 @@ function init(initData) {
   }
 
   function checkIfHoverable(node) {
-    console.log("checking if node is hoverable");
-    console.log(node);
     var info = getFileInfo();
 
     const code = document.getElementById('source-code');
     const stringBefore = textBeforeOffset(node, 0, code);
 
     const rows = stringBefore.split('\n');
-    // rows are zero-indexed
+    // The server expects the rows to be zero-indexed.
     const row = rows.length - 1;
     const col = rows[row].length;
 
@@ -304,15 +300,12 @@ function init(initData) {
         const resp = JSON.parse(this.responseText);
         node.className = 'hoverable';
         node.setAttribute('definition-url', resp.url);
-        console.log("added link to " + resp.url);
       } else {
         node.className = 'nonhoverable';
-        console.log("ERROR: " + this.status);
       }
     }
 
     const url = "/api/v1/langserver/jumptodef?repo_name=" + info.repoName + "&file_path=" + window.filePath + "&row=" + row + "&col=" + col;
-    console.log("sending request to " + url);
     xhttp.open("GET", url);
     xhttp.send();
   }
@@ -333,7 +326,6 @@ function init(initData) {
     // decide what to do based on the class of the span containing the text
     const node = textNode.parentNode;
     const nodeClass = node.className;
-    console.log('node class is ' + nodeClass);
     if (nodeClass === 'hovering') {
       return;
     }
@@ -355,7 +347,6 @@ function init(initData) {
       return;
     }
     if (node.id !== 'source-code') {
-      console.log('node id is ' + node.id);
       return;
     }
     // syntax highlighter hasn't identified the token yet, so we have to parse
@@ -364,8 +355,6 @@ function init(initData) {
     if (symbolRange.toString().length === 0) {
       return;
     }
-    console.log('symbol range has text: ' + symbolRange.toString());
-    console.log(symbolRange);
     const newSpan = document.createElement('span');
     symbolRange.surroundContents(newSpan);
     checkIfHoverable(newSpan);
@@ -375,7 +364,6 @@ function init(initData) {
     // rows are zero-indexed
     const row = rows.length - 1;
     const col = rows[row].length;
-    console.log('hover over row ' + row + ' col ' + col);
   }
 
   function processKeyEvent(event) {
@@ -496,7 +484,6 @@ function init(initData) {
       processKeyEvent(event);
     });
 
-    // if cmd + click is found, trigger jump to definition
     $(document).on('click', function (event) {
       triggerJumpToDef(event);
     });
