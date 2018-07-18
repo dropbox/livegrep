@@ -268,35 +268,7 @@ function init(initData) {
       const cachedUrl = nodeClicked.getAttribute('definition-url');
       if (cachedUrl) {
         window.location.href = cachedUrl;
-        return;
       }
-
-      var info = getFileInfo();
-
-      const stringBefore = textBeforeOffset(
-          document.getSelection().anchorNode,
-          document.getSelection().anchorOffset,
-          document.getElementById('source-code')
-      );
-
-      const rows = stringBefore.split('\n');
-      // rows are zero-indexed
-      const row = rows.length - 1;
-      const col = rows[row].length;
-
-      xhttp = new XMLHttpRequest();
-      xhttp.onreadystatechange = function() {
-          if (this.status == 200 && this.responseText) {
-              const resp = JSON.parse(this.responseText);
-              window.location.href = resp.url;
-          } else {
-              console.log("ERROR: " + this.status);
-          }
-      }
-
-      console.log("sending request to /api/v1/langserver/jumptodef?repo_name=" + info.repoName + "&file_path=" + window.filePath + "&row=" + row + "&col=" + col);
-      xhttp.open("GET", "/api/v1/langserver/jumptodef?repo_name=" + info.repoName + "&file_path=" + window.filePath + "&row=" + row + "&col=" + col);
-      xhttp.send()
   }
 
   var hoveringNode = null;
@@ -350,7 +322,7 @@ function init(initData) {
   function onHover(clientX, clientY) {
     // The source-code consists of a <code id='source-code' class='code-pane'>
     // containing lots of <span class="token tokentype">token</span>
-    // hoverable text may be surrounted by <span class="hoverable">
+    // hoverable text may be surrounded by <span class="hoverable">
     // text being hovered over is changed to class="hovering"
     // non-hoverable text is class="nonhoverable"
     const pos = document.caretRangeFromPoint(clientX, clientY);
