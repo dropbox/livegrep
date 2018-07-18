@@ -8,7 +8,6 @@ import (
 	"path"
 	"regexp"
 	"strconv"
-	"strings"
 	texttemplate "text/template"
 	"time"
 
@@ -22,12 +21,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"errors"
 	"github.com/livegrep/livegrep/server/config"
 	"github.com/livegrep/livegrep/server/log"
 	"github.com/livegrep/livegrep/server/reqid"
 	"github.com/livegrep/livegrep/server/templates"
 	"net/url"
-	"errors"
 )
 
 type page struct {
