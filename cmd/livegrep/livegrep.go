@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	serveAddr   = flag.String("listen", "127.0.0.1:8910", "The address to listen on")
+	serveAddr   = flag.String("listen", "0.0.0.0:8910", "The address to listen on")
 	docRoot     = flag.String("docroot", "", "The livegrep document root (web/ directory). If not provided, this defaults to web/ inside the bazel-created runfiles directory adjacent to the livegrep binary.")
 	indexConfig = flag.String("index-config", "", "Codesearch index config file; provide to enable repo browsing")
 	reload      = flag.Bool("reload", false, "Reload template files on every request")

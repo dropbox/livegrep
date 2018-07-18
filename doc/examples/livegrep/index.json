@@ -1,22 +1,23 @@
 {
     "name": "livegrep",
-    "fs_paths": [
-        {
-            "name": "livegrep/livegrep",
-            "path": "src/",
-            "metadata": {
-                "url-pattern": "https://github.com/{name}/blob/HEAD/src/{path}#L{lno}"
-            }
-        }
-    ],
     "repositories": [
         {
             "name": "livegrep",
             "path": ".",
-            "revisions": [ "HEAD" ],
+            "revisions": [
+                "HEAD"
+            ],
             "metadata": {
-                "github": "nelhage/livegrep"
-            }
+                "url-pattern": "/view/{name}/{path}"
+            },
+            "lang_servers": [
+                {
+                    "address": "0.0.0.0:3141",
+                    "extensions": [
+                        ".go"
+                    ]
+                }
+            ]
         }
     ]
 }
