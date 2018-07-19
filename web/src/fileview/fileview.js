@@ -488,7 +488,7 @@ function init(initData) {
     });
 
     $('#source-code').on('mousemove', function (event) {
-      if (initData.hasLangServer && initData.commit === 'HEAD') {
+      if (initData.has_lang_server && initData.commit === 'HEAD') {
         onHover(event.clientX, event.clientY);
       }
     });
