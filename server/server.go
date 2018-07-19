@@ -93,6 +93,10 @@ func (s *server) ServeRoot(ctx context.Context, w http.ResponseWriter, r *http.R
 	http.Redirect(w, r, "/search", 303)
 }
 
+func (s *server) ServeFastSearch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+  http.Redirect(w, r, "/search/?q=" + r.URL.Query().Get(":query"), 303)
+}
+
 func (s *server) ServeSearch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	urls := make(map[string]map[string]string, len(s.bk))
 	backends := make([]*Backend, 0, len(s.bk))
@@ -714,6 +718,7 @@ func New(cfg *config.Config) (http.Handler, error) {
 	m.Add("GET", "/api/v1/search/", srv.Handler(srv.ServeAPISearch))
 	m.Add("GET", "/api/v1/langserver/jumptodef", srv.Handler(srv.ServeJumpToDef))
 	m.Add("GET", "/api/v1/langserver/hover", srv.Handler(srv.ServeHover))
+  m.Add("GET", "/:query/", srv.Handler(srv.ServeFastSearch))
 
 	var h http.Handler = m
 
