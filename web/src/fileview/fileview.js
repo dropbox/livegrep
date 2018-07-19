@@ -212,7 +212,7 @@ function init(initData) {
 
     var fileInfo = getFileInfo();
 
-    var url = initData.repo_info.metadata['url-pattern']
+    var url = initData.repo_info.metadata['url-pattern'];
 
     // If {path} already has a slash in front of it, trim extra leading
     // slashes from `pathInRepo` to avoid a double-slash in the URL.
@@ -359,11 +359,6 @@ function init(initData) {
     symbolRange.surroundContents(newSpan);
     checkIfHoverable(newSpan);
     return;
-    const stringBefore = textBeforeOffset(textNode, pos.startOffset, node);
-    const rows = stringBefore.split('\n');
-    // rows are zero-indexed
-    const row = rows.length - 1;
-    const col = rows[row].length;
   }
 
   function processKeyEvent(event) {
@@ -484,14 +479,16 @@ function init(initData) {
       processKeyEvent(event);
     });
 
+    // language servers can only deal with HEAD
+
     $(document).on('click', function (event) {
-      if (window.hasLangServer) {
+      if (window.hasLangServer && initData.commit === 'HEAD') {
         triggerJumpToDef(event);
       }
     });
 
     $('#source-code').on('mousemove', function (event) {
-      if (window.hasLangServer) {
+      if (window.hasLangServer && initData.commit === 'HEAD') {
         onHover(event.clientX, event.clientY);
       }
     });
@@ -527,4 +524,4 @@ function init(initData) {
 
 module.exports = {
   init: init
-}
+};

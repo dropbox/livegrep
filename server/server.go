@@ -729,10 +729,15 @@ func New(cfg *config.Config) (http.Handler, error) {
 				log.Printf(ctx, "%s", err.Error())
 			}
 
+			// DBX HACK:
+			// Replace the .git suffix with the 'corpus" directory
+			// since language servers need the files.
+			p := strings.Replace(r.Path, ".git", "_corpus", -1)
+
 			initParams := &langserver.InitializeParams{
 				ProcessId:        nil,
-				OriginalRootPath: r.Path,
-				RootUri:          "file://" + r.Path,
+				OriginalRootPath: p,
+				RootUri:          "file://" + p,
 				Capabilities:     langserver.ClientCapabilities{},
 			}
 
