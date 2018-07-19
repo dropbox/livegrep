@@ -530,7 +530,7 @@ func (s *server) ServeJumpToDef(ctx context.Context, w http.ResponseWriter, r *h
 		targetPath := strings.TrimPrefix(location.URI, "file://")
 		// Add 1 because URL is 1-indexed and language server is 0-indexed.
 		lineNum := location.TextRange.Start.Line + 1
-		if !strings.HasPrefix(targetPath, repo.Path) {
+		if !strings.HasPrefix(targetPath, convertRepoPathToWorkspace(repo.Path)) {
 			writeError(ctx, w, 400, "out_of_repo", "locations outside repo not supported")
 			return
 		}
@@ -599,11 +599,8 @@ func (s *server) parseDocPositionParams(params url.Values) (*langserver.TextDocu
 }
 
 func buildURI(repoPath string, relativeFilePath string) string {
-	// DBX HACK:
-	// Replace the .git suffix with the 'corpus" directory
-	// since language servers need the files.
-	p := strings.Replace(repoPath, ".git", "_corpus", -1)
-	return "file://" + p + "/" + relativeFilePath
+	// DBX modification:
+	return "file://" + convertRepoPathToWorkspace(repoPath) + "/" + relativeFilePath
 }
 
 func (s *server) ServeHover(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -635,6 +632,13 @@ func (s *server) ServeHover(ctx context.Context, w http.ResponseWriter, r *http.
 	}
 
 	replyJSON(ctx, w, 200, &hoverResponse.TextRange)
+}
+
+// DBX HACK:
+// Replace the .git suffix with the 'corpus" directory
+// since language servers need the files.
+func convertRepoPathToWorkspace(path string) string {
+	return strings.Replace(path, ".git", "_corpus", -1)
 }
 
 type handler func(c context.Context, w http.ResponseWriter, r *http.Request)
@@ -733,10 +737,8 @@ func New(cfg *config.Config) (http.Handler, error) {
 				log.Printf(ctx, "%s", err.Error())
 			}
 
-			// DBX HACK:
-			// Replace the .git suffix with the 'corpus" directory
-			// since language servers need the files.
-			p := strings.Replace(r.Path, ".git", "_corpus", -1)
+			// DBX modification
+			p := convertRepoPathToWorkspace(r.Path)
 
 			initParams := &langserver.InitializeParams{
 				ProcessId:        nil,
