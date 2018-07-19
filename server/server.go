@@ -8,19 +8,25 @@ import (
 	"path"
 	"regexp"
 	"strconv"
-	"strings"
 	texttemplate "text/template"
 	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/bmizerany/pat"
-	libhoney "github.com/honeycombio/libhoney-go"
+	"github.com/honeycombio/libhoney-go"
 
+	"github.com/livegrep/livegrep/server/langserver"
+
+	"path/filepath"
+	"strings"
+
+	"errors"
 	"github.com/livegrep/livegrep/server/config"
 	"github.com/livegrep/livegrep/server/log"
 	"github.com/livegrep/livegrep/server/reqid"
 	"github.com/livegrep/livegrep/server/templates"
+	"net/url"
 )
 
 type page struct {
@@ -39,6 +45,7 @@ type server struct {
 	bk          map[string]*Backend
 	bkOrder     []string
 	repos       map[string]config.RepoConfig
+	langsrv     map[string]langserver.Client
 	inner       http.Handler
 	Templates   map[string]*template.Template
 	OpenSearch  *texttemplate.Template
@@ -47,6 +54,17 @@ type server struct {
 
 	honey *libhoney.Builder
 }
+
+type GotoDefResponse struct {
+	URL string `json:"url"`
+}
+
+const (
+	repoNameParamName = "repo_name"
+	rowParamName      = "row"
+	filePathParamName = "file_path"
+	colParamName      = "col"
+)
 
 func (s *server) loadTemplates() {
 	s.Templates = make(map[string]*template.Template)
@@ -73,6 +91,10 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) ServeRoot(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/search", 303)
+}
+
+func (s *server) ServeFastSearch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+  http.Redirect(w, r, "/search/?q=" + r.URL.Query().Get(":query"), 303)
 }
 
 func (s *server) ServeSearch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -484,6 +506,148 @@ func (h *reloadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.inner.ServeHTTP(w, r)
 }
 
+func (s *server) ServeJumpToDef(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	docPositionParams, repo, err := s.parseDocPositionParams(r.URL.Query())
+	if err != nil {
+		writeError(ctx, w, 400, "bad_arguments", err.Error())
+		return
+	}
+
+	l := langserver.ForFile(repo, docPositionParams.TextDocument.URI)
+	langServer := s.langsrv[l.Address]
+	if langServer == nil {
+		// no language server
+		writeError(ctx, w, 404, "not_found", err.Error())
+		return
+	}
+	locations, err := langServer.JumpToDef(ctx, docPositionParams)
+	if err != nil {
+		writeError(ctx, w, 500, "lsp_error", err.Error())
+		return
+	}
+
+	retUrl := ""
+
+	if len(locations) > 0 {
+		location := locations[0]
+		targetPath := strings.TrimPrefix(location.URI, "file://")
+		// Add 1 because URL is 1-indexed and language server is 0-indexed.
+		lineNum := location.TextRange.Start.Line + 1
+		convertedRepo := convertRepoPathToWorkspace(repo.Path)
+		if !strings.HasPrefix(targetPath, convertedRepo) {
+			writeError(ctx, w, 400, "out_of_repo", "locations outside repo not supported")
+			return
+		}
+
+		relPath, err := filepath.Rel(convertedRepo, targetPath)
+		if err != nil {
+			writeError(ctx, w, 500, "invalid_path", err.Error())
+			return
+		}
+
+		retUrl = fmt.Sprintf("/view/%s/%s#L%d", repo.Name, relPath, lineNum)
+	} else {
+		writeError(ctx, w, 400, "unresolved", "could not resolve an identifier")
+		return
+	}
+
+	replyJSON(ctx, w, 200, &GotoDefResponse{
+		URL: retUrl,
+	})
+}
+
+func findRepo(repos []config.RepoConfig, repoName string) (*config.RepoConfig, error) {
+	for _, repo := range repos {
+		if repo.Name == repoName {
+			return &repo, nil
+		}
+	}
+	return nil, errors.New(fmt.Sprintf("repo with name %s not found", repoName))
+}
+
+func (s *server) parseDocPositionParams(params url.Values) (*langserver.TextDocumentPositionParams, *config.RepoConfig, error) {
+
+	row, column, repo, fpath :=
+		params.Get(rowParamName),
+		params.Get(colParamName),
+		params.Get(repoNameParamName),
+		params.Get(filePathParamName)
+
+	if row == "" || column == "" || repo == "" || fpath == "" {
+		return nil, nil, errors.New("row, column, repo, and filepath need to be set")
+	}
+
+	rowN, err := strconv.Atoi(row)
+	if err != nil {
+		return nil, nil, errors.New("row param needs to be a number, got " + row)
+	}
+
+	colN, err := strconv.Atoi(column)
+	if err != nil {
+		return nil, nil, errors.New("column param needs to be a number, got " + column)
+	}
+
+	repoConfig, err := findRepo(s.config.IndexConfig.Repositories, repo)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	positionParams := &langserver.TextDocumentPositionParams{
+		TextDocument: langserver.TextDocumentIdentifier{
+			URI: buildURI(repoConfig.Path, fpath),
+		},
+		Position: langserver.Position{
+			Line:      rowN,
+			Character: colN,
+		},
+	}
+
+	return positionParams, repoConfig, nil
+}
+
+func buildURI(repoPath string, relativeFilePath string) string {
+	// DBX modification:
+	return "file://" + convertRepoPathToWorkspace(repoPath) + "/" + relativeFilePath
+}
+
+func (s *server) ServeHover(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+
+	docPositionParams, repo, err := s.parseDocPositionParams(r.URL.Query())
+	if err != nil {
+		writeError(ctx, w, 400, "bad_arguments", err.Error())
+		return
+	}
+
+	l := langserver.ForFile(repo, docPositionParams.TextDocument.URI)
+	if l == nil {
+		// no language server
+		writeError(ctx, w, 404, "not_found", err.Error())
+		return
+	}
+
+	langServer := s.langsrv[l.Address]
+	if langServer == nil {
+		// no language server
+		writeError(ctx, w, 404, "not_found", err.Error())
+		return
+	}
+
+	hoverResponse, err := langServer.Hover(ctx, docPositionParams)
+	if err != nil {
+		writeError(ctx, w, 500, "lsp_error", err.Error())
+		return
+	}
+
+	replyJSON(ctx, w, 200, &hoverResponse.TextRange)
+}
+
+// DBX HACK:
+// Replace the .git suffix with the 'corpus" directory
+// since language servers need the files.
+func convertRepoPathToWorkspace(path string) string {
+	return strings.Replace(path, ".git", "_corpus", -1)
+}
+
 type handler func(c context.Context, w http.ResponseWriter, r *http.Request)
 
 const RequestTimeout = 8 * time.Second
@@ -504,9 +668,10 @@ func (s *server) Handler(f func(c context.Context, w http.ResponseWriter, r *htt
 
 func New(cfg *config.Config) (http.Handler, error) {
 	srv := &server{
-		config: cfg,
-		bk:     make(map[string]*Backend),
-		repos:  make(map[string]config.RepoConfig),
+		config:  cfg,
+		bk:      make(map[string]*Backend),
+		repos:   make(map[string]config.RepoConfig),
+		langsrv: make(map[string]langserver.Client),
 	}
 	srv.loadTemplates()
 
@@ -534,10 +699,6 @@ func New(cfg *config.Config) (http.Handler, error) {
 		srv.bkOrder = append(srv.bkOrder, be.Id)
 	}
 
-	for _, r := range srv.config.IndexConfig.Repositories {
-		srv.repos[r.Name] = r
-	}
-
 	m := pat.New()
 	m.Add("GET", "/log/:repo/", srv.Handler(srv.ServeLog))
 	m.Add("GET", "/blame/:repo/:hash/", srv.Handler(srv.ServeBlame))
@@ -555,6 +716,9 @@ func New(cfg *config.Config) (http.Handler, error) {
 
 	m.Add("GET", "/api/v1/search/:backend", srv.Handler(srv.ServeAPISearch))
 	m.Add("GET", "/api/v1/search/", srv.Handler(srv.ServeAPISearch))
+	m.Add("GET", "/api/v1/langserver/jumptodef", srv.Handler(srv.ServeJumpToDef))
+	m.Add("GET", "/api/v1/langserver/hover", srv.Handler(srv.ServeHover))
+  m.Add("GET", "/:query/", srv.Handler(srv.ServeFastSearch))
 
 	var h http.Handler = m
 
@@ -567,6 +731,42 @@ func New(cfg *config.Config) (http.Handler, error) {
 	mux.Handle("/", h)
 
 	srv.inner = mux
+
+	ctx := context.Background()
+
+	for _, r := range srv.config.IndexConfig.Repositories {
+
+		for _, langServer := range r.LangServers {
+
+			client, err := langserver.NewClient(ctx, langServer.Address)
+
+			// a failing language server isn't fatal. We'd prefer to log these metrics.
+			if err != nil {
+				log.Printf(ctx, "%s", err.Error())
+			}
+
+			// DBX modification
+			p := convertRepoPathToWorkspace(r.Path)
+
+			initParams := &langserver.InitializeParams{
+				ProcessId:        nil,
+				OriginalRootPath: p,
+				RootUri:          "file://" + p,
+				Capabilities:     langserver.ClientCapabilities{},
+			}
+
+			_, err = client.Initialize(ctx, initParams)
+
+			// a failing language server isn't fatal. We'd prefer to log these metrics.
+			if err != nil {
+				log.Printf(ctx, "%s", err.Error())
+			}
+
+			srv.langsrv[langServer.Address] = client
+		}
+
+		srv.repos[r.Name] = r
+	}
 
 	return srv, nil
 }

@@ -85,6 +85,7 @@ func getFuncs() map[string]interface{} {
 		"loop":         func(n int) []struct{} { return make([]struct{}, n) },
 		"toLineNum":    func(n int) int { return n + 1 },
 		"prettyCommit": prettyCommit,
+		"split":        func(str string, sep string) []string { return strings.Split(str, sep) },
 		"linkTag":      linkTag,
 		"scriptTag":    scriptTag,
 	}
