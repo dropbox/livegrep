@@ -70,7 +70,8 @@ type fileViewerContext struct {
 	Commit         string
 	DirContent     *directoryContent
 	FileContent    *sourceFileContent
-	IsBlameAvailable boolExternalDomain string
+	IsBlameAvailable bool
+	ExternalDomain string
 	Permalink      string
 	Headlink       string
 }
@@ -290,7 +291,8 @@ func buildFileData(relativePath string, repo config.RepoConfig, commit string) (
 		Commit:         commit,
 		DirContent:     dirContent,
 		FileContent:    fileContent,
-		IsBlameAvailable: blameHistory != nil,ExternalDomain: externalDomain,
+		IsBlameAvailable: blameHistory != nil,
+		ExternalDomain: externalDomain,
 		Permalink:      permalink,
 		Headlink:       headlink,
 	}, nil
