@@ -599,7 +599,11 @@ func (s *server) parseDocPositionParams(params url.Values) (*langserver.TextDocu
 }
 
 func buildURI(repoPath string, relativeFilePath string) string {
-	return "file://" + repoPath + "/" + relativeFilePath
+	// DBX HACK:
+	// Replace the .git suffix with the 'corpus" directory
+	// since language servers need the files.
+	p := strings.Replace(repoPath, ".git", "_corpus", -1)
+	return "file://" + p + "/" + relativeFilePath
 }
 
 func (s *server) ServeHover(ctx context.Context, w http.ResponseWriter, r *http.Request) {
