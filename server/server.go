@@ -530,12 +530,13 @@ func (s *server) ServeJumpToDef(ctx context.Context, w http.ResponseWriter, r *h
 		targetPath := strings.TrimPrefix(location.URI, "file://")
 		// Add 1 because URL is 1-indexed and language server is 0-indexed.
 		lineNum := location.TextRange.Start.Line + 1
-		if !strings.HasPrefix(targetPath, convertRepoPathToWorkspace(repo.Path)) {
+		convertedRepo := convertRepoPathToWorkspace(repo.Path)
+		if !strings.HasPrefix(targetPath, convertedRepo) {
 			writeError(ctx, w, 400, "out_of_repo", "locations outside repo not supported")
 			return
 		}
 
-		relPath, err := filepath.Rel(repo.Path, targetPath)
+		relPath, err := filepath.Rel(convertedRepo, targetPath)
 		if err != nil {
 			writeError(ctx, w, 500, "invalid_path", err.Error())
 			return
