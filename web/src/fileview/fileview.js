@@ -305,7 +305,7 @@ function init(initData) {
       }
     }
 
-    const url = "/api/v1/langserver/jumptodef?repo_name=" + info.repoName + "&file_path=" + window.filePath + "&row=" + row + "&col=" + col;
+    const url = "/api/v1/langserver/jumptodef?repo_name=" + info.repoName + "&file_path=" + initData.file_path + "&row=" + row + "&col=" + col;
     xhttp.open("GET", url);
     xhttp.send();
   }
@@ -482,13 +482,13 @@ function init(initData) {
     // language servers can only deal with HEAD
 
     $(document).on('click', function (event) {
-      if (window.hasLangServer && initData.commit === 'HEAD') {
+      if (initData.has_lang_server && initData.commit === 'HEAD') {
         triggerJumpToDef(event);
       }
     });
 
     $('#source-code').on('mousemove', function (event) {
-      if (window.hasLangServer && initData.commit === 'HEAD') {
+      if (initData.hasLangServer && initData.commit === 'HEAD') {
         onHover(event.clientX, event.clientY);
       }
     });
