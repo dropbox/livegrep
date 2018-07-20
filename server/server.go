@@ -730,11 +730,14 @@ func New(cfg *config.Config) (http.Handler, error) {
 
 	srv.inner = mux
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 10)
+	defer cancel()
 
 	for _, r := range srv.config.IndexConfig.Repositories {
 
 		for _, langServer := range r.LangServers {
+
+			log.Printf(ctx, "creating new client for repo %s at address %s", r.Name, langServer.Address)
 
 			client, err := langserver.NewClient(ctx, langServer.Address)
 
