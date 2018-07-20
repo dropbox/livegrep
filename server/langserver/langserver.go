@@ -34,13 +34,17 @@ type langServerClientImpl struct {
 	rpcClient *jsonrpc2.Conn
 }
 
+type handler struct{}
+
+func (h handler) Handle(context.Context, *jsonrpc2.Conn, *jsonrpc2.Request) {}
+
 func NewClient(ctx context.Context, address string) (client Client, err error) {
 	codec := jsonrpc2.VSCodeObjectCodec{}
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return
 	}
-	rpcConn := jsonrpc2.NewConn(ctx, jsonrpc2.NewBufferedStream(conn, codec), nil)
+	rpcConn := jsonrpc2.NewConn(ctx, jsonrpc2.NewBufferedStream(conn, codec), handler{})
 	client = &langServerClientImpl{
 		rpcClient: rpcConn,
 	}
