@@ -55,11 +55,11 @@ func (history GitHistory) DiffBlame(commitHash string, path string) (*BlameResul
 }
 
 func (history GitHistory) FileBlame(commitHash string, path string) (*BlameResult, error) {
-	fileHistory, i, err := history.findCommit(commitHash, path)
+	fileHistory, i, err := history.FindCommit(commitHash, path)
 	if err != nil {
 		return nil, err
 	}
-	i-- // TODO: inline findCommit so we don't need this
+	i-- // TODO: inline FindCommit so we don't need this
 	r := BlameResult{}
 	r.BlameVector, r.FutureVector = blame(fileHistory, i+1, 0)
 	if fileHistory[i].Commit.Hash == commitHash {
@@ -72,30 +72,50 @@ func (history GitHistory) FileBlame(commitHash string, path string) (*BlameResul
 	return &r, nil
 }
 
-func (history GitHistory) findCommit(commitHash string, path string) (File, int, error) {
+func (history GitHistory) FindCommitBatch(commitHashes []string, path string) (File, []int, error) {
 	fileHistory, ok := history.Files[path]
 	if !ok {
-		return File{}, -1, fmt.Errorf("no such file: %v", path)
+		return File{}, nil, fmt.Errorf("no such file: %v", path)
 	}
-	i := 0
+
+	commit_map := make(map[string]int)  // Maps a commit hash to its index into fileHistory
+	for _, commitHash := range commitHashes {
+	        commit_map[commitHash] = -1
+	}
+
 	j := 0
-	for ; i < len(history.Hashes); i++ {
+	commits_found := 0
+	for i := 0; i < len(history.Hashes) && commits_found < len(commitHashes); i++ {
 		h := history.Hashes[i]
 		if j < len(fileHistory) && fileHistory[j].Commit.Hash == h {
 			j++
 		}
-		if h == commitHash {
-			break
+                if _, ok := commit_map[h]; ok {
+                        commit_map[h] = j
+                        commits_found += 1
+                }
+	}
+	commit_list := make([]int, len(commitHashes))
+	for i, commitHash := range commitHashes {
+	        commit_list[i] = commit_map[commitHash]
+	        if commit_list[i] == -1 {
+		        return File{}, nil, fmt.Errorf("no such commit: %v", commitHash)
+	        } else if commit_list[i] == 0 {
+		        return File{}, nil, fmt.Errorf("file %s does not exist at commit %s", path, commitHash)
 		}
 	}
-	if i == len(history.Hashes) {
-		return File{}, -1, fmt.Errorf("no such commit: %v", commitHash)
+	return fileHistory, commit_list, nil
+}
+
+func (history GitHistory) FindCommit(commitHash string, path string) (File, int, error) {
+        fileHistory, indices, err := history.FindCommitBatch([]string { commitHash }, path)
+	if err != nil {
+	        return File{}, -1, err
 	}
-	if j == 0 {
-		return File{}, -1, fmt.Errorf("file %s does not exist at commit %s",
-			path, commitHash)
+	if len(indices) != 1 {
+	        return File{}, -1, fmt.Errorf("FindCommitBatch did not return the expected number of results")
 	}
-	return fileHistory, j, nil
+	return fileHistory, indices[0], nil
 }
 
 func blame(history File, end int, bump int) (BlameVector, BlameVector) {

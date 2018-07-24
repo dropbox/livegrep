@@ -267,3 +267,100 @@ func TestPreviousAndNext(t *testing.T) {
 		}
 	}
 }
+
+func TestFindCommit(t *testing.T) {
+	b2 := &Commit{"b2", "", 0, nil}
+	c3 := &Commit{"c3", "", 0, nil}
+
+	var tests = []struct {
+		history         GitHistory
+		expectedResults []string
+	}{{
+		GitHistory{
+			[]string{"a1", "b2", "c3", "d4"},
+			nil,
+			map[string]File{
+				"README": {
+					mkDiff(b2, "README", []Hunk{{0, 0, 1, 2}}),
+					mkDiff(c3, "README", []Hunk{{2, 1, 2, 1}}),
+				},
+			},
+		},
+		[]string{
+			"file README does not exist at commit a1", "1", "2", "2",
+		},
+	}}
+	for testIndex, test := range tests {
+		for i, expectedResult := range test.expectedResults {
+			hash := test.history.Hashes[i]
+			_, index, err := test.history.FindCommit(hash, "README")
+			out := ""
+			if err != nil {
+				out = fmt.Sprint(err)
+			} else {
+				out = fmt.Sprint(index)
+			}
+
+			if out != expectedResult {
+				t.Error("Test", testIndex+1,
+					"line", i+1,
+					"failed",
+					"\n  Wanted", expectedResult,
+					"\n  Got   ", out)
+			}
+		}
+	}
+}
+
+func TestFindCommitBatch(t *testing.T) {
+	b2 := &Commit{"b2", "", 0, nil}
+	d4 := &Commit{"d4", "", 0, nil}
+
+	var tests = []struct {
+		history         GitHistory
+		queries         [][]string
+		expectedResults []string
+	}{{
+		GitHistory{
+			[]string{"a1", "b2", "c3", "d4", "e5"},
+			nil,
+			map[string]File{
+				"README": {
+					mkDiff(b2, "README", []Hunk{{0, 0, 1, 2}}),
+					mkDiff(d4, "README", []Hunk{{2, 1, 2, 1}}),
+				},
+			},
+		},
+		[][]string{
+		        {"a1", "b2"},
+			{"b2", "c3"},
+			{"b2", "d4"},
+			{"e5", "c3", "b2"},
+		},
+		[]string{
+			"file README does not exist at commit a1",
+			"[1 1]",
+			"[1 2]",
+			"[2 1 1]",
+		},
+	}}
+	for testIndex, test := range tests {
+		for i, query := range test.queries {
+			_, indices, err := test.history.FindCommitBatch(query, "README")
+			out := ""
+			if err != nil {
+				out = fmt.Sprint(err)
+			} else {
+				out = fmt.Sprint(indices)
+			}
+			expectedResult := test.expectedResults[i]
+			if out != expectedResult {
+				t.Error("Test", testIndex+1,
+					"line", i+1,
+					"failed",
+					"\n  Wanted", expectedResult,
+					"\n  Got   ", out)
+			}
+		}
+	}
+}
