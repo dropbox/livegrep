@@ -72,39 +72,73 @@ func (history GitHistory) FileBlame(commitHash string, path string) (*BlameResul
 	return &r, nil
 }
 
+// Produces BlameVector for the given commits for the given path.
+// This method differs from FileBlame in that it does not try to compute previous and next commits.
+func (history GitHistory) FileBlameVectorBatch(commits []string, path string) ([]BlameVector, error) {
+        fileHistory, indices, err := history.FindCommitBatch(commits, path)
+	if err != nil {
+		return nil, err
+	}
+	resultMap := make(map[string]BlameVector)
+	for _, index := range indices {
+	    commitHash := fileHistory[index - 1].Commit.Hash
+	    resultMap[commitHash] = nil
+	}
+	segments := BlameSegments{}
+	commitsFound := 0
+	for _, diff := range fileHistory {
+	        commit := diff.Commit.Hash
+		segments = diff.step(segments)
+		if _, ok := resultMap[commit]; ok {
+		    resultMap[commit] = segments.flatten()
+		    commitsFound += 1
+		    if commitsFound == len(commits) {
+		            break
+		    }
+		}
+	}
+	resultList := make([]BlameVector, len(commits))
+	for i, index := range indices {
+	    commitHash := fileHistory[index - 1].Commit.Hash
+	    resultList[i] = resultMap[commitHash]
+	}
+	return resultList, nil
+}
+
+
 func (history GitHistory) FindCommitBatch(commitHashes []string, path string) (File, []int, error) {
 	fileHistory, ok := history.Files[path]
 	if !ok {
 		return File{}, nil, fmt.Errorf("no such file: %v", path)
 	}
 
-	commit_map := make(map[string]int)  // Maps a commit hash to its index into fileHistory
+	commitMap := make(map[string]int)  // Maps a commit hash to its index into fileHistory
 	for _, commitHash := range commitHashes {
-	        commit_map[commitHash] = -1
+	        commitMap[commitHash] = -1
 	}
 
 	j := 0
-	commits_found := 0
-	for i := 0; i < len(history.Hashes) && commits_found < len(commitHashes); i++ {
+	commitsFound := 0
+	for i := 0; i < len(history.Hashes) && commitsFound < len(commitHashes); i++ {
 		h := history.Hashes[i]
 		if j < len(fileHistory) && fileHistory[j].Commit.Hash == h {
 			j++
 		}
-                if _, ok := commit_map[h]; ok {
-                        commit_map[h] = j
-                        commits_found += 1
+                if _, ok := commitMap[h]; ok {
+                        commitMap[h] = j
+                        commitsFound += 1
                 }
 	}
-	commit_list := make([]int, len(commitHashes))
+	indices := make([]int, len(commitHashes))
 	for i, commitHash := range commitHashes {
-	        commit_list[i] = commit_map[commitHash]
-	        if commit_list[i] == -1 {
+	        indices[i] = commitMap[commitHash]
+	        if indices[i] == -1 {
 		        return File{}, nil, fmt.Errorf("no such commit: %v", commitHash)
-	        } else if commit_list[i] == 0 {
+	        } else if indices[i] == 0 {
 		        return File{}, nil, fmt.Errorf("file %s does not exist at commit %s", path, commitHash)
 		}
 	}
-	return fileHistory, commit_list, nil
+	return fileHistory, indices, nil
 }
 
 func (history GitHistory) FindCommit(commitHash string, path string) (File, int, error) {
