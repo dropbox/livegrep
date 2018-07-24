@@ -459,6 +459,12 @@ a:hover {
     padding: 20px;
 }
 
+.file-viewer .ff-error-screen .u-modal-content {
+    width: 600px;
+    padding: 20px;
+    background: rgba(255, 128, 128, 1.0);
+}
+
 .file-viewer .help-screen li {
     line-height: 2;
 }
