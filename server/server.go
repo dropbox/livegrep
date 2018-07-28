@@ -155,7 +155,7 @@ func (s *server) ServeFile(ctx context.Context, w http.ResponseWriter, r *http.R
                         http.Error(w, "Invalid line number", 404)
                         return
                 }
-                ff_commit, ff_lineno, err := fastForward(repo, path, commit, head, source_lineno)
+                ff_commit, ff_lineno, err := FastForward(repo, path, commit, head, source_lineno)
                 if err != nil {
                         log.Printf(ctx, err.Error())
                         http.Error(w, err.Error(), 404)
