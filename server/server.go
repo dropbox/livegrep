@@ -130,7 +130,6 @@ func (s *server) ServeFile(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	commit := r.URL.Query().Get("commit")
         ffl := r.URL.Query().Get("ffl")
-        error := r.URL.Query().Get("error")
 	if commit == "" {
 		commit = "HEAD"
 	}
@@ -149,7 +148,7 @@ func (s *server) ServeFile(ctx context.Context, w http.ResponseWriter, r *http.R
         h := getHistory(repo.Name).Hashes
         head := h[len(h)-1]
 
-        if ffl != "" && commit != head && error == "" {
+        if ffl != "" && commit != head {
                 source_lineno, err := strconv.Atoi(ffl)
                 if err != nil {
                         http.Error(w, "Invalid line number", 404)

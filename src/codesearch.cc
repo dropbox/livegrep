@@ -84,11 +84,11 @@ memrchr(const void *s,
     const unsigned char *cp;
 
     if (n != 0) {
-        cp = (unsigned char *)s + n;
-        do {
-            if (*(--cp) == (unsigned char)c)
-                return (void *)cp;
-        } while (--n != 0);
+	cp = (unsigned char *)s + n;
+	do {
+	    if (*(--cp) == (unsigned char)c)
+		return (void *)cp;
+	} while (--n != 0);
     }
     return (void *)0;
 }
@@ -506,7 +506,7 @@ code_searcher::~code_searcher() {
 }
 
 void code_searcher::index_filenames() {
-    log("Building filename index for %llu files...", files_.size());
+    log("Building filename index...");
     filename_positions_.reserve(files_.size());
 
     filename_data_size_ = 0;
