@@ -45,6 +45,7 @@ var extToLangMap map[string]string = map[string]string{
 	".sh":          "bash",
 	".sql":         "sql",
 	".swift":       "swift",
+	".ts":          "typescript",
 	".tsx":         "tsx",
 	".xml":         "markup",
 	".yaml":        "yaml",
