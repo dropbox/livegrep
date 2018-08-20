@@ -274,7 +274,7 @@ func buildFileData(relativePath string, repo config.RepoConfig, commit string) (
 
 	permalink := ""
 	headlink := ""
-	fastforwardlink := "?commit=" + commitHash[:16] + "&ffl=1"
+	fastforwardlink := ""
 
 	if !strings.HasPrefix(commitHash, commit) {
 		permalink = "?commit=" + commitHash[:16]
@@ -282,6 +282,7 @@ func buildFileData(relativePath string, repo config.RepoConfig, commit string) (
 		if dirContent != nil {
 			headlink = "."
 		} else {
+			fastforwardlink = "?commit=" + commitHash[:16] + "&ffl=1"
 			headlink = segments[len(segments)-1].Name
 		}
 	}
