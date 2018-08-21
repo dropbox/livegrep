@@ -84,16 +84,8 @@ func (history GitHistory) FileBlameWithStart(start_commit, target_commit, path s
 		return nil, fmt.Errorf("%s is later than %s", start_commit, target_commit)
 	}
 
-	// We need a reasonably large line count for the initial BlameSegment, so that following diffs
-	// can step through without going out of bounds. Instead of computing it exactly, we simply make a
-	// crude estimate that's guaranteed to work.
-	initial_line_count := 1
-	for i := indices[0]; i < indices[1]; i++ {
-		for _, hunk := range fileHistory[i].Hunks {
-			initial_line_count += hunk.OldStart + hunk.OldLength - 1
-		}
-	}
-
+	// Get the starting line count of the file.
+	initial_line_count := fileHistory[indices[0]-1].LineCountAfter
 	segments := BlameSegments{{initial_line_count, 1, fileHistory[indices[0]-1].Commit}}
 	for i := indices[0]; i < indices[1]; i++ {
 		segments = fileHistory[i].step(segments)

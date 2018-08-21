@@ -57,7 +57,7 @@ const (
 
 func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno int) (int, error) {
 	if source_lineno < 1 || source_lineno > len(source_lines) {
-		return 0, errors.New("Line number is out of range")
+		return 0, fmt.Errorf("Line number %d is out of range", source_lineno)
 	}
 	if len(target_lines) < 1 {
 		return 0, errors.New("Cannot propagate line number in a deletion")
@@ -67,7 +67,7 @@ func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno in
 		new_start := max(source_lineno-(SOURCE_CHUNK_MAX_CONTEXT/2), 1)
 		new_end := new_start + SOURCE_CHUNK_MAX_CONTEXT
 		if new_end > len(source_lines) {
-			new_start = max(new_start-(new_end-len(source_lines)), 1)
+			new_start = max(len(source_lines)+SOURCE_CHUNK_MAX_CONTEXT, 1)
 			new_end = len(source_lines)
 		}
 		new_source_lineno := source_lineno - new_start + 1
@@ -224,7 +224,10 @@ func FastForward(repo config.RepoConfig, file, source_commit, target_commit stri
 	// In the simplest case, a line in the target commit will have the same blame info as the
 	// line in question in the source commit.
 	blamevector, err := gitHistory.FileBlameWithStart(source_commit, target_commit, file)
-	if err != nil || blamevector == nil {
+	if err != nil {
+		return "", 0, err
+	}
+	if blamevector == nil {
 		return "", 0, fmt.Errorf("unable to obtain blame information for commits")
 	}
 	for i, b := range blamevector {

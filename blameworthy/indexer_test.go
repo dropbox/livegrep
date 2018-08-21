@@ -7,7 +7,7 @@ import (
 )
 
 func mkDiff(commit *Commit, path string, hunks []Hunk) Diff {
-	return Diff{commit, path, "before", "after", hunks}
+	return Diff{commit, path, "before", "after", 0, 0, hunks}
 }
 
 func TestStepping(t *testing.T) {
