@@ -75,7 +75,7 @@ func (history GitHistory) FileBlame(commitHash string, path string) (*BlameResul
 // Produces BlameVector for the given commits for the given path.
 // This method differs from FileBlame in that it does not try to compute previous and next commits.
 func (history GitHistory) FileBlameVectorBatch(commits []string, path string) ([]BlameVector, error) {
-        fileHistory, indices, err := history.FindCommitBatch(commits, path)
+        fileHistory, indices, err := history.FindCommits(commits, path)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (history GitHistory) FileBlameVectorBatch(commits []string, path string) ([
 }
 
 
-func (history GitHistory) FindCommitBatch(commitHashes []string, path string) (File, []int, error) {
+func (history GitHistory) FindCommits(commitHashes []string, path string) (File, []int, error) {
 	fileHistory, ok := history.Files[path]
 	if !ok {
 		return File{}, nil, fmt.Errorf("no such file: %v", path)
@@ -142,12 +142,12 @@ func (history GitHistory) FindCommitBatch(commitHashes []string, path string) (F
 }
 
 func (history GitHistory) FindCommit(commitHash string, path string) (File, int, error) {
-        fileHistory, indices, err := history.FindCommitBatch([]string { commitHash }, path)
+        fileHistory, indices, err := history.FindCommits([]string { commitHash }, path)
 	if err != nil {
 	        return File{}, -1, err
 	}
 	if len(indices) != 1 {
-	        return File{}, -1, fmt.Errorf("FindCommitBatch did not return the expected number of results")
+	        return File{}, -1, fmt.Errorf("FindCommits did not return the expected number of results")
 	}
 	return fileHistory, indices[0], nil
 }

@@ -312,7 +312,7 @@ func TestFindCommit(t *testing.T) {
 	}
 }
 
-func TestFindCommitBatch(t *testing.T) {
+func TestFindCommits(t *testing.T) {
 	b2 := &Commit{"b2", "", 0, nil}
 	d4 := &Commit{"d4", "", 0, nil}
 
@@ -346,7 +346,7 @@ func TestFindCommitBatch(t *testing.T) {
 	}}
 	for testIndex, test := range tests {
 		for i, query := range test.queries {
-			_, indices, err := test.history.FindCommitBatch(query, "README")
+			_, indices, err := test.history.FindCommits(query, "README")
 			out := ""
 			if err != nil {
 				out = fmt.Sprint(err)

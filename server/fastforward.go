@@ -230,12 +230,12 @@ func FastForward(repo config.RepoConfig, file, source_commit, target_commit stri
 	// Either the line has been deleted or the line has mutated. We need to track explicitly.
 	// TODO: Recurse for now, but this could just be a linear loop, given that all the helper
 	// functions are going to be in linear in the # of commits between the source and target anyway.
-	fileHistory, indices, err := gitHistory.FindCommitBatch([]string { source_commit, target_commit }, file)
+	fileHistory, indices, err := gitHistory.FindCommits([]string { source_commit, target_commit }, file)
 	if err != nil {
 		return "", 0, err
 	}
 	if len(indices) != 2 {
-		return "", 0, errors.New("Invalid number of results from FindCommitBatch")
+		return "", 0, errors.New("Invalid number of results from FindCommits")
 	}
 	index_source := indices[0] - 1
 	index_target := indices[1] - 1
