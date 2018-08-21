@@ -240,9 +240,6 @@ func FastForward(repo config.RepoConfig, file, source_commit, target_commit stri
 	if err != nil {
 		return "", 0, err
 	}
-	if len(indices) != 2 {
-		return "", 0, errors.New("Invalid number of results from FindCommits")
-	}
 	index_source := indices[0] - 1
 	index_target := indices[1] - 1
 	if index_source+1 < index_target {

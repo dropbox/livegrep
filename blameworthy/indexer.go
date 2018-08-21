@@ -145,9 +145,6 @@ func (history GitHistory) FindCommit(commitHash string, path string) (File, int,
 	if err != nil {
 		return File{}, -1, err
 	}
-	if len(indices) != 1 {
-		return File{}, -1, fmt.Errorf("FindCommits did not return the expected number of results")
-	}
 	return fileHistory, indices[0], nil
 }
 
