@@ -24,8 +24,8 @@ func getFileSlice(repo config.RepoConfig, commit, file string, start, length int
 		return nil, err
 	}
 	lines := strings.Split(content, "\n")
-	if start >= 1 && length >= 0 && start + length <= len(lines) + 1 {
-		return lines[start-1:start-1+length], nil
+	if start >= 1 && length >= 0 && start+length <= len(lines)+1 {
+		return lines[start-1 : start-1+length], nil
 	}
 	return nil, errors.New("Unable to slice file content")
 }
@@ -43,12 +43,16 @@ func penaltyForDistance(distance int) int {
 }
 
 func max(a, b int) int {
-	if a > b { return a } else { return b }
+	if a > b {
+		return a
+	} else {
+		return b
+	}
 }
 
 const (
 	SOURCE_CHUNK_MAX_CONTEXT int = 10
-	PENALTY_FOR_SKIPPING int = 2
+	PENALTY_FOR_SKIPPING     int = 2
 )
 
 func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno int) (int, error) {
@@ -60,10 +64,10 @@ func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno in
 	}
 	if len(source_lines) > SOURCE_CHUNK_MAX_CONTEXT {
 		// HAX(jongmin): Constraint the # of source lines we run on to avoid quadratic runtime.
-		new_start := max(source_lineno - (SOURCE_CHUNK_MAX_CONTEXT / 2), 1)
+		new_start := max(source_lineno-(SOURCE_CHUNK_MAX_CONTEXT/2), 1)
 		new_end := new_start + SOURCE_CHUNK_MAX_CONTEXT
 		if new_end > len(source_lines) {
-			new_start = max(new_start - (new_end - len(source_lines)), 1)
+			new_start = max(new_start-(new_end-len(source_lines)), 1)
 			new_end = len(source_lines)
 		}
 		new_source_lineno := source_lineno - new_start + 1
@@ -95,8 +99,8 @@ func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno in
 	var score = make([][]int, len(source_chars))
 	var track = make([][]int, len(source_chars))
 	for i := range score {
-	    score[i] = make([]int, len(target_chars))
-	    track[i] = make([]int, len(target_chars))
+		score[i] = make([]int, len(target_chars))
+		track[i] = make([]int, len(target_chars))
 	}
 
 	i1 := 0
@@ -130,8 +134,10 @@ func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno in
 		for j := 0; j < len(target_chars); j++ {
 			if source_char == target_chars[j] {
 				for k := last_j_with_match; k < j; k++ {
-					if score[i-1][k] < 0 { continue }
-					candidate_score := score[i-1][k] + penaltyForDistance(j - k)
+					if score[i-1][k] < 0 {
+						continue
+					}
+					candidate_score := score[i-1][k] + penaltyForDistance(j-k)
 					if best_score == -1 || candidate_score <= best_score {
 						best_score = candidate_score
 						best_predecessor = k
@@ -147,7 +153,7 @@ func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno in
 				}
 				score[i][j] = best_score
 				track[i][j] = best_predecessor
-				last_j_with_match = j;
+				last_j_with_match = j
 			} else if score[i-1][j] > -1 {
 				score[i][j] = score[i-1][j] + PENALTY_FOR_SKIPPING
 				track[i][j] = j
@@ -159,10 +165,10 @@ func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno in
 	var mapping = make([]int, len(source_chars))
 	cursor := -1
 	for i := len(source_chars) - 1; i >= 0; i-- {
-		if i == len(source_chars) - 1 {
+		if i == len(source_chars)-1 {
 			best_score := -1
 			for j := 0; j < len(target_chars); j++ {
-				candidate_score := score[i][j] + penaltyForDistance(len(target_chars) - 1 - j)
+				candidate_score := score[i][j] + penaltyForDistance(len(target_chars)-1-j)
 				if score[i][j] >= 0 && (best_score == -1 || best_score > candidate_score) {
 					best_score = candidate_score
 					cursor = j
@@ -175,17 +181,17 @@ func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno in
 	}
 
 	// Compute where the characters in the source line being tracked ended up.
-	var target_line_beginnings = make([]int, len(target_lines) + 1)
+	var target_line_beginnings = make([]int, len(target_lines)+1)
 	var target_line_histogram = make([]int, len(target_lines))
 	target_line_beginnings[0] = 0
 	for i, target_line := range target_lines {
-	    target_line_beginnings[i+1] = target_line_beginnings[i] + len(target_line) + 1
-	    target_line_histogram[i] = 0
+		target_line_beginnings[i+1] = target_line_beginnings[i] + len(target_line) + 1
+		target_line_histogram[i] = 0
 	}
 	j := 0
 	prev_mapping := -1
 	for _, m := range mapping[i1:i2] {
-		for ; j < len(target_line_histogram) - 1; j++ {
+		for ; j < len(target_line_histogram)-1; j++ {
 			if target_line_beginnings[j] <= m && m < target_line_beginnings[j+1] {
 				break
 			}
@@ -213,7 +219,7 @@ func FastForward(repo config.RepoConfig, file, source_commit, target_commit stri
 	}
 	// In the simplest case, a line in the target commit will have the same blame info as the
 	// line in question in the source commit.
-	blamevectors, err := gitHistory.FileBlameVectorBatch([]string { source_commit, target_commit }, file)
+	blamevectors, err := gitHistory.FileBlameVectorBatch([]string{source_commit, target_commit}, file)
 	if err != nil || len(blamevectors) != 2 || blamevectors[0] == nil || blamevectors[1] == nil {
 		return "", 0, fmt.Errorf("unable to obtain blame information for commits")
 	}
@@ -230,7 +236,7 @@ func FastForward(repo config.RepoConfig, file, source_commit, target_commit stri
 	// Either the line has been deleted or the line has mutated. We need to track explicitly.
 	// TODO: Recurse for now, but this could just be a linear loop, given that all the helper
 	// functions are going to be in linear in the # of commits between the source and target anyway.
-	fileHistory, indices, err := gitHistory.FindCommits([]string { source_commit, target_commit }, file)
+	fileHistory, indices, err := gitHistory.FindCommits([]string{source_commit, target_commit}, file)
 	if err != nil {
 		return "", 0, err
 	}
@@ -239,15 +245,15 @@ func FastForward(repo config.RepoConfig, file, source_commit, target_commit stri
 	}
 	index_source := indices[0] - 1
 	index_target := indices[1] - 1
-	if index_source + 1 < index_target {
-		middle_commit := fileHistory[(index_source + index_target) / 2].Commit.Hash
+	if index_source+1 < index_target {
+		middle_commit := fileHistory[(index_source+index_target)/2].Commit.Hash
 		commit, middle_lineno, err := FastForward(repo, file, source_commit, middle_commit, source_lineno)
 		if err != nil {
-			 return "", 0, err
+			return "", 0, err
 		}
 		if commit != middle_commit {
-			 // We were unable to fully propagate the line number, so bail.
-			 return commit, middle_lineno, nil
+			// We were unable to fully propagate the line number, so bail.
+			return commit, middle_lineno, nil
 		}
 		return FastForward(repo, file, middle_commit, target_commit, middle_lineno)
 	} else {
@@ -256,13 +262,13 @@ func FastForward(repo config.RepoConfig, file, source_commit, target_commit stri
 		// between added and removed chunks, instead of assuming the naive pairing.
 		var hunk blameworthy.Hunk
 		for _, hunk = range fileHistory[index_target].Hunks {
-			if (source_lineno >= hunk.OldStart) && (source_lineno < hunk.OldStart + hunk.OldLength) {
+			if (source_lineno >= hunk.OldStart) && (source_lineno < hunk.OldStart+hunk.OldLength) {
 				break
 			}
 		}
 		if hunk.NewLength == 0 {
-			 // The line was deleted, so we cannot propagate anymore.
-			 return source_commit, source_lineno, nil
+			// The line was deleted, so we cannot propagate anymore.
+			return source_commit, source_lineno, nil
 		}
 		// Map line numbers in the chunks.
 		source_lines, err := getFileSlice(repo, source_commit, file, hunk.OldStart, hunk.OldLength)
@@ -273,7 +279,7 @@ func FastForward(repo config.RepoConfig, file, source_commit, target_commit stri
 		if err != nil {
 			return "", 0, err
 		}
-		result, err := analyzeEditAndMapLine(source_lines, target_lines, source_lineno - hunk.OldStart + 1)
+		result, err := analyzeEditAndMapLine(source_lines, target_lines, source_lineno-hunk.OldStart+1)
 		if err != nil {
 			return "", 0, err
 		}

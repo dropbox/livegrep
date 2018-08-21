@@ -332,7 +332,7 @@ func TestFindCommits(t *testing.T) {
 			},
 		},
 		[][]string{
-		        {"a1", "b2"},
+			{"a1", "b2"},
 			{"b2", "c3"},
 			{"b2", "d4"},
 			{"e5", "c3", "b2"},

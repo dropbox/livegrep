@@ -6,7 +6,7 @@ import (
 )
 
 func TestAnalyzeEditAndMapLine(t *testing.T) {
-	source_lines := []string {
+	source_lines := []string{
 		"func my_function(arg1 int, arg2 int, arg3 string) {",
 		"	 if (arg1 == arg2) {",
 		"		  log.Print(\"They are the same\")",
@@ -18,7 +18,7 @@ func TestAnalyzeEditAndMapLine(t *testing.T) {
 		"	 log.Printf(\"Values are %d and %d\", arg1, arg2)",
 		"}",
 	}
-	target_lines := []string {
+	target_lines := []string{
 		"// Comments",
 		"func my_method(arg_a int, arg_b int, arg_c string) {",
 		"	 if (arg_a == arg_b) {",
@@ -30,7 +30,7 @@ func TestAnalyzeEditAndMapLine(t *testing.T) {
 		"}",
 	}
 	var cases = []struct {
-		source_lineno int
+		source_lineno  int
 		expectedOutput string
 	}{
 		{1, "2"},
