@@ -72,37 +72,33 @@ func (history GitHistory) FileBlame(commitHash string, path string) (*BlameResul
 	return &r, nil
 }
 
-// Produces BlameVector for the given commits for the given path.
-// This method differs from FileBlame in that it does not try to compute previous and next commits.
-func (history GitHistory) FileBlameVectorBatch(commits []string, path string) ([]BlameVector, error) {
-	fileHistory, indices, err := history.FindCommits(commits, path)
+// Produces BlameVector between two commits for the given path. That is, produce BlameVector for the
+// specified target commit as if the specified start commit is the first commit for the path.
+// This method further differs from FileBlame in that it does not try to compute previous and next commits.
+func (history GitHistory) FileBlameWithStart(start_commit, target_commit, path string) (BlameVector, error) {
+	fileHistory, indices, err := history.FindCommits([]string{start_commit, target_commit}, path)
 	if err != nil {
 		return nil, err
 	}
-	resultMap := make(map[string]BlameVector)
-	for _, index := range indices {
-		commitHash := fileHistory[index-1].Commit.Hash
-		resultMap[commitHash] = nil
+	if indices[0] > indices[1] {
+		return nil, fmt.Errorf("%s is later than %s", start_commit, target_commit)
 	}
-	segments := BlameSegments{}
-	commitsFound := 0
-	for _, diff := range fileHistory {
-		commit := diff.Commit.Hash
-		segments = diff.step(segments)
-		if _, ok := resultMap[commit]; ok {
-			resultMap[commit] = segments.flatten()
-			commitsFound += 1
-			if commitsFound == len(commits) {
-				break
-			}
+
+	// We need a reasonably large line count for the initial BlameSegment, so that following diffs
+	// can step through without going out of bounds. Instead of computing it exactly, we simply make a
+	// crude estimate that's guaranteed to work.
+	initial_line_count := 1
+	for i := indices[0]; i < indices[1]; i++ {
+		for _, hunk := range fileHistory[i].Hunks {
+			initial_line_count += hunk.OldStart + hunk.OldLength - 1
 		}
 	}
-	resultList := make([]BlameVector, len(commits))
-	for i, index := range indices {
-		commitHash := fileHistory[index-1].Commit.Hash
-		resultList[i] = resultMap[commitHash]
+
+	segments := BlameSegments{{initial_line_count, 1, fileHistory[indices[0]-1].Commit}}
+	for i := indices[0]; i < indices[1]; i++ {
+		segments = fileHistory[i].step(segments)
 	}
-	return resultList, nil
+	return segments.flatten(), nil
 }
 
 func (history GitHistory) FindCommits(commitHashes []string, path string) (File, []int, error) {

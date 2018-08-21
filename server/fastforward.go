@@ -217,18 +217,18 @@ func FastForward(repo config.RepoConfig, file, source_commit, target_commit stri
 	if !ok {
 		return "", 0, errors.New("Repo not configured for blame")
 	}
-	// In the simplest case, a line in the target commit will have the same blame info as the
-	// line in question in the source commit.
-	blamevectors, err := gitHistory.FileBlameVectorBatch([]string{source_commit, target_commit}, file)
-	if err != nil || len(blamevectors) != 2 || blamevectors[0] == nil || blamevectors[1] == nil {
-		return "", 0, fmt.Errorf("unable to obtain blame information for commits")
-	}
-	if source_lineno < 1 || source_lineno > len(blamevectors[0]) {
+	if source_lineno < 1 {
 		return "", 0, errors.New(fmt.Sprintf("Invalid line number %d in %s", source_lineno, source_commit))
 	}
-	origin := blamevectors[0][source_lineno-1]
-	for i, b := range blamevectors[1] {
-		if b.Commit.Hash == origin.Commit.Hash && b.LineNumber == origin.LineNumber {
+
+	// In the simplest case, a line in the target commit will have the same blame info as the
+	// line in question in the source commit.
+	blamevector, err := gitHistory.FileBlameWithStart(source_commit, target_commit, file)
+	if err != nil || blamevector == nil {
+		return "", 0, fmt.Errorf("unable to obtain blame information for commits")
+	}
+	for i, b := range blamevector {
+		if b.Commit.Hash == source_commit && b.LineNumber == source_lineno {
 			return target_commit, i + 1, nil
 		}
 	}
