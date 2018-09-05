@@ -100,15 +100,6 @@ function parseHashForLineRange(hashString) {
   return null;
 }
 
-function parseURLForFastForwardedLine(url) {
-  if (url.includes('&ffl=')) {
-    var l = parseInt(url.split('&ffl=')[1]);
-    return { start: l, end: l };
-  } else {
-    return null;
-  }
-}
-
 function addHighlightClassesForRange(range, root) {
   var idSelectors = [];
   for(var lineNumber = range.start; lineNumber <= range.end; lineNumber++) {
@@ -179,11 +170,6 @@ function init(initData) {
 
     // Highlight the current range from the hash, if any
     var range = parseHashForLineRange(document.location.hash);
-
-    // Highlight the fast-forwarded number if applicable.
-    if(!range) {
-      range = parseURLForFastForwardedLine(document.location.href);
-    }
 
     if(range) {
       addHighlightClassesForRange(range, lineNumberContainer);
@@ -277,11 +263,11 @@ function init(initData) {
       var href = $a.attr('href').split('#')[0];
       if (range !== null) {
         if (href.includes('&ffl=')) {
-          href = href.split('&ffl=')[0];
-          href += '&ffl=' + range.start;
-        } else {
-          href += '#L' + range.start;
-        }
+	  href = href.split('&ffl=')[0];
+	  href += '&ffl=' + range.start;
+	} else {
+	  href += '#L' + range.start;
+	}
       }
 
       $a.attr('href', href);
