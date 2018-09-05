@@ -17,6 +17,11 @@
       <li class="header-action">
         <a id="blame-link" data-action-name="blame" title="Blame. Keyboard shortcut: b" href="#">blame [<span class="shortcut">b</span>]</a>
       </li>,
+      {{if .FastForwardlink}}
+      <li class="header-action">
+        <a id="ff-link" data-action-name="ff" title="Fast forward. Keyboard shortcut: f" href="{{.FastForwardlink}}">fast-forward [<span class='shortcut'>f</span>]</a>
+      </li>,
+      {{end}}
       {{if .FileContent}}
       <li class="header-action">
         <a id="log-link" data-action-name="log" title="Log. Keyboard shortcut: l" href="#">log [<span class="shortcut">l</span>]</a>
@@ -86,6 +91,13 @@
       {{end}}
   </div>
 
+  <section class="ff-error-screen u-modal-overlay hidden">
+    <div class="ff-error-screen-card u-modal-content">
+      <p align="center">Stopped fast-forwarding at {{.Commit}} as the line is deleted in the next commit.</p>
+    </div>
+  </section>
+
+  </section>
   <section class="help-screen u-modal-overlay hidden">
     <div class="help-screen-card u-modal-content">
       <ul>

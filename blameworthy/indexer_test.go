@@ -7,7 +7,7 @@ import (
 )
 
 func mkDiff(commit *Commit, path string, hunks []Hunk) Diff {
-	return Diff{commit, path, "before", "after", hunks}
+	return Diff{commit, path, "before", "after", 0, 0, hunks}
 }
 
 func TestStepping(t *testing.T) {
@@ -257,6 +257,103 @@ func TestPreviousAndNext(t *testing.T) {
 			out = strings.Replace(out, fmt.Sprintf("%p", d4), "d4", -1)
 			out = strings.Replace(out, "<nil>", "", -1)
 
+			if out != expectedResult {
+				t.Error("Test", testIndex+1,
+					"line", i+1,
+					"failed",
+					"\n  Wanted", expectedResult,
+					"\n  Got   ", out)
+			}
+		}
+	}
+}
+
+func TestFindCommit(t *testing.T) {
+	b2 := &Commit{"b2", "", 0, nil}
+	c3 := &Commit{"c3", "", 0, nil}
+
+	var tests = []struct {
+		history         GitHistory
+		expectedResults []string
+	}{{
+		GitHistory{
+			[]string{"a1", "b2", "c3", "d4"},
+			nil,
+			map[string]File{
+				"README": {
+					mkDiff(b2, "README", []Hunk{{0, 0, 1, 2}}),
+					mkDiff(c3, "README", []Hunk{{2, 1, 2, 1}}),
+				},
+			},
+		},
+		[]string{
+			"file README does not exist at commit a1", "1", "2", "2",
+		},
+	}}
+	for testIndex, test := range tests {
+		for i, expectedResult := range test.expectedResults {
+			hash := test.history.Hashes[i]
+			_, index, err := test.history.FindCommit(hash, "README")
+			out := ""
+			if err != nil {
+				out = fmt.Sprint(err)
+			} else {
+				out = fmt.Sprint(index)
+			}
+
+			if out != expectedResult {
+				t.Error("Test", testIndex+1,
+					"line", i+1,
+					"failed",
+					"\n  Wanted", expectedResult,
+					"\n  Got   ", out)
+			}
+		}
+	}
+}
+
+func TestFindCommits(t *testing.T) {
+	b2 := &Commit{"b2", "", 0, nil}
+	d4 := &Commit{"d4", "", 0, nil}
+
+	var tests = []struct {
+		history         GitHistory
+		queries         [][]string
+		expectedResults []string
+	}{{
+		GitHistory{
+			[]string{"a1", "b2", "c3", "d4", "e5"},
+			nil,
+			map[string]File{
+				"README": {
+					mkDiff(b2, "README", []Hunk{{0, 0, 1, 2}}),
+					mkDiff(d4, "README", []Hunk{{2, 1, 2, 1}}),
+				},
+			},
+		},
+		[][]string{
+			{"a1", "b2"},
+			{"b2", "c3"},
+			{"b2", "d4"},
+			{"e5", "c3", "b2"},
+		},
+		[]string{
+			"file README does not exist at commit a1",
+			"[1 1]",
+			"[1 2]",
+			"[2 1 1]",
+		},
+	}}
+	for testIndex, test := range tests {
+		for i, query := range test.queries {
+			_, indices, err := test.history.FindCommits(query, "README")
+			out := ""
+			if err != nil {
+				out = fmt.Sprint(err)
+			} else {
+				out = fmt.Sprint(indices)
+			}
+			expectedResult := test.expectedResults[i]
 			if out != expectedResult {
 				t.Error("Test", testIndex+1,
 					"line", i+1,

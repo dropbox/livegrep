@@ -73,6 +73,7 @@ type fileViewerContext struct {
 	IsBlameAvailable bool
 	ExternalDomain   string
 	Permalink        string
+	FastForwardlink  string
 	Headlink         string
 }
 
@@ -273,12 +274,15 @@ func buildFileData(relativePath string, repo config.RepoConfig, commit string) (
 
 	permalink := ""
 	headlink := ""
+	fastforwardlink := ""
+
 	if !strings.HasPrefix(commitHash, commit) {
 		permalink = "?commit=" + commitHash[:16]
 	} else {
 		if dirContent != nil {
 			headlink = "."
 		} else {
+			fastforwardlink = "?commit=" + commitHash[:16] + "&ffl=1"
 			headlink = segments[len(segments)-1].Name
 		}
 	}
@@ -292,6 +296,7 @@ func buildFileData(relativePath string, repo config.RepoConfig, commit string) (
 		IsBlameAvailable: blameHistory != nil,
 		ExternalDomain:   externalDomain,
 		Permalink:        permalink,
+		FastForwardlink:  fastforwardlink,
 		Headlink:         headlink,
 	}, nil
 }

@@ -126,6 +126,7 @@ function init(initData) {
   var root = $('.file-content');
   var lineNumberContainer = root.find('.line-numbers');
   var helpScreen = $('.help-screen');
+  var fastForwardErrorScreen = $('.ff-error-screen');
 
   function showHelp() {
     helpScreen.removeClass('hidden').children().on('click', function(event) {
@@ -143,6 +144,22 @@ function init(initData) {
     return true;
   }
 
+  function showFastForwardError() {
+    fastForwardErrorScreen.removeClass('hidden').children().on('click', function(event) {
+      // Prevent clicks inside the element to reach the document
+      event.stopImmediatePropagation();
+      return true;
+    });
+
+    $(document).on('click', hideFastForwardError);
+  }
+
+  function hideFastForwardError() {
+    fastForwardErrorScreen.addClass('hidden').children().off('click');
+    $(document).off('click', hideFastForwardError);
+    return true;
+  }
+
   function handleHashChange(scrollElementIntoView) {
     if(scrollElementIntoView === undefined) {
       scrollElementIntoView = true; // default if nothing was provided
@@ -153,6 +170,7 @@ function init(initData) {
 
     // Highlight the current range from the hash, if any
     var range = parseHashForLineRange(document.location.hash);
+
     if(range) {
       addHighlightClassesForRange(range, lineNumberContainer);
       if(scrollElementIntoView) {
@@ -164,7 +182,7 @@ function init(initData) {
     $('#blame-link').attr('href', getBlameLink(range));
     $('#log-link').attr('href', getLogLink());
     $('#external-link').attr('href', getExternalLink(range));
-    updateFragments(range, $('#permalink, #back-to-head'));
+    updateFragments(range, $('#permalink, #back-to-head, #ff-link'));
   }
 
   function getLogLink() {
@@ -175,6 +193,17 @@ function init(initData) {
     url = url.replace('{path}', fileInfo.pathInRepo);
 
     return url;
+  }
+
+  function getFastForwardLink(range) {
+    var fileInfo = getFileInfo();
+    var url = '/view/{name}/{path}?commit={version}';
+    url = url.replace('{name}', fileInfo.repoName);
+    url = url.replace('{path}', fileInfo.pathInRepo);
+    url = url.replace('{version}', initData.commit);
+    if (range != null) {
+      url += '&ffl=' + range.start;
+    }
   }
 
   function getBlameLink(range) {
@@ -233,8 +262,14 @@ function init(initData) {
       var $a = $(this);
       var href = $a.attr('href').split('#')[0];
       if (range !== null) {
-        href += '#L' + range.start;
+        if (href.includes('&ffl=')) {
+	  href = href.split('&ffl=')[0];
+	  href += '&ffl=' + range.start;
+	} else {
+	  href += '#L' + range.start;
+	}
       }
+
       $a.attr('href', href);
     });
   }
@@ -265,6 +300,12 @@ function init(initData) {
       // Visually highlight the link to indicate what happened
       $('#blame-link').focus();
       window.location = $('#blame-link').attr('href');
+    } else if(String.fromCharCode(event.which) == 'F') {
+      var $a = $('#ff-link');
+      if ($a.length > 0) {
+        $a.focus();
+        window.location = $('#ff-link').attr('href');
+      }
     } else if (String.fromCharCode(event.which) == 'L') {
       var $a = $('#log-link');
       if ($a.length > 0) {
@@ -367,6 +408,10 @@ function init(initData) {
     });
 
     initializeActionButtons($('.header .header-actions'));
+
+    if (document.location.hash.includes("ff-error")) {
+      showFastForwardError();
+    }
 
     // Syntax highlighting.
     setTimeout(function() {

@@ -129,6 +129,7 @@ func (s *server) ServeFile(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	commit := r.URL.Query().Get("commit")
+	ffl := r.URL.Query().Get("ffl")
 	if commit == "" {
 		commit = "HEAD"
 	}
@@ -142,6 +143,36 @@ func (s *server) ServeFile(ctx context.Context, w http.ResponseWriter, r *http.R
 	if !ok {
 		http.Error(w, "No such repo", 404)
 		return
+	}
+
+	h := getHistory(repo.Name).Hashes
+	head := h[len(h)-1]
+
+	if ffl != "" {
+		source_lineno, err := strconv.Atoi(ffl)
+		if err != nil {
+			http.Error(w, "Invalid line number", 404)
+			return
+		}
+		if commit != head {
+			ff_commit, ff_lineno, err := FastForward(repo, path, commit, head, source_lineno)
+			if err != nil {
+				log.Printf(ctx, err.Error())
+				http.Error(w, err.Error(), 404)
+				return
+			}
+			url := fmt.Sprint("/view/", repo.Name, "/", path, "?commit=", ff_commit, "#L", ff_lineno)
+			if ff_commit != head {
+				url += "#ff-error"
+			}
+			http.Redirect(w, r, url, 307)
+			return
+		} else {
+			// No fast-forwarding is necessary.
+			url := fmt.Sprint("/view/", repo.Name, "/", path, "?commit=", commit, "#L", source_lineno)
+			http.Redirect(w, r, url, 307)
+			return
+		}
 	}
 
 	data, err := buildFileData(path, repo, commit)

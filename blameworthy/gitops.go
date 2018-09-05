@@ -28,11 +28,13 @@ type Commit struct {
 type File []Diff
 
 type Diff struct {
-	Commit         *Commit
-	Path           string
-	ChecksumBefore string
-	ChecksumAfter  string
-	Hunks          []Hunk
+	Commit          *Commit
+	Path            string
+	ChecksumBefore  string
+	ChecksumAfter   string
+	LineCountBefore int
+	LineCountAfter  int
+	Hunks           []Hunk
 }
 
 type Hunk struct {
@@ -178,13 +180,16 @@ func ParseGitLog(input_stream io.ReadCloser) (*GitHistory, error) {
 				path = line2[4:]
 			}
 			checksumBefore := ""
+			lineCountBefore := 0
 			if files[path] != nil {
 				i := len(files[path]) - 1
 				checksumBefore = files[path][i].ChecksumAfter
+				lineCountBefore = files[path][i].LineCountAfter
 			}
 			files[path] = append(files[path], Diff{
 				commit, path,
 				checksumBefore, checksum,
+				lineCountBefore, lineCountBefore,
 				[]Hunk{},
 			})
 			checksum = ""
@@ -208,6 +213,7 @@ func ParseGitLog(input_stream io.ReadCloser) (*GitHistory, error) {
 
 			diff.Hunks = append(diff.Hunks,
 				Hunk{OldStart, OldLength, NewStart, NewLength})
+			diff.LineCountAfter += NewLength - OldLength
 
 			// Expect no unified diff if hunk header ends in "@@-"
 			is_stripped := len(groups[5]) > 0
