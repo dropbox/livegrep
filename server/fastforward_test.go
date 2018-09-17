@@ -6,7 +6,7 @@ import (
 )
 
 func TestAnalyzeEditAndMapLine(t *testing.T) {
-	source_lines := []string{
+	lines0 := []string{
 		"func my_function(arg1 int, arg2 int, arg3 string) {",
 		"	 if (arg1 == arg2) {",
 		"		  log.Print(\"They are the same\")",
@@ -18,7 +18,7 @@ func TestAnalyzeEditAndMapLine(t *testing.T) {
 		"	 log.Printf(\"Values are %d and %d\", arg1, arg2)",
 		"}",
 	}
-	target_lines := []string{
+	lines1 := []string{
 		"// Comments",
 		"func my_method(arg_a int, arg_b int, arg_c string) {",
 		"	 if (arg_a == arg_b) {",
@@ -29,23 +29,36 @@ func TestAnalyzeEditAndMapLine(t *testing.T) {
 		"	 log.Printf(\"Done!\")",
 		"}",
 	}
+	lines2 := []string{""}
 	var cases = []struct {
+		source_lines   []string
+		target_lines   []string
 		source_lineno  int
 		expectedOutput string
 	}{
-		{1, "2"},
-		{2, "3"},
-		{3, "4"},
-		{4, "5"},
-		{5, "5"}, // deleted line
-		{6, "6"}, // this and the next two lines have been collapsed
-		{7, "6"},
-		{8, "6"},
-		{9, "7"},
-		{10, "9"},
+		{lines0, lines1, 1, "2"},
+		{lines0, lines1, 2, "3"},
+		{lines0, lines1, 3, "4"},
+		{lines0, lines1, 4, "5"},
+		{lines0, lines1, 5, "5"}, // deleted line
+		{lines0, lines1, 6, "6"}, // this and the next two lines have been collapsed
+		{lines0, lines1, 7, "6"},
+		{lines0, lines1, 8, "6"},
+		{lines0, lines1, 9, "7"},
+		{lines0, lines1, 10, "9"},
+		{lines1, lines0, 1, "1"}, // deleted line
+		{lines1, lines0, 2, "1"},
+		{lines1, lines0, 3, "2"},
+		{lines1, lines0, 4, "3"},
+		{lines1, lines0, 5, "4"},
+		{lines1, lines0, 6, "6"},
+		{lines1, lines0, 7, "9"},
+		{lines1, lines0, 8, "9"}, // deleted line
+		{lines1, lines0, 9, "10"},
+		{lines0, lines2, 1, "1"},   // regression test
 	}
 	for _, testCase := range cases {
-		target_lineno, err := analyzeEditAndMapLine(source_lines, target_lines, testCase.source_lineno)
+		target_lineno, err := analyzeEditAndMapLine(testCase.source_lines, testCase.target_lines, testCase.source_lineno)
 		out := ""
 		if err != nil {
 			out = fmt.Sprint(err)
