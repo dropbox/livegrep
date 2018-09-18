@@ -175,7 +175,9 @@ func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno in
 				}
 			}
 		} else {
-			cursor = track[i+1][cursor]
+			if cursor != -1 {
+				cursor = track[i+1][cursor]
+			}
 		}
 		mapping[i] = cursor
 	}
