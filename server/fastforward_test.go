@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 )
 
@@ -30,6 +31,10 @@ func TestAnalyzeEditAndMapLine(t *testing.T) {
 		"}",
 	}
 	lines2 := []string{""}
+
+	// Regression test for OOB error in case of a really long patch
+	lines3 := append(lines0[:1], append(make([]string, 100), lines0[1:]...)...)
+
 	var cases = []struct {
 		source_lines   []string
 		target_lines   []string
@@ -55,7 +60,8 @@ func TestAnalyzeEditAndMapLine(t *testing.T) {
 		{lines1, lines0, 7, "9"},
 		{lines1, lines0, 8, "9"}, // deleted line
 		{lines1, lines0, 9, "10"},
-		{lines0, lines2, 1, "1"},   // regression test
+		{lines0, lines2, 1, "1"},                                 // regression test
+		{lines3, lines0, len(lines3), strconv.Itoa(len(lines0))}, // regression test
 	}
 	for _, testCase := range cases {
 		target_lineno, err := analyzeEditAndMapLine(testCase.source_lines, testCase.target_lines, testCase.source_lineno)
