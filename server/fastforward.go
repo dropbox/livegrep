@@ -65,10 +65,10 @@ func analyzeEditAndMapLine(source_lines, target_lines []string, source_lineno in
 	if len(source_lines) > SOURCE_CHUNK_MAX_CONTEXT {
 		// HAX(jongmin): Constraint the # of source lines we run on to avoid quadratic runtime.
 		new_start := max(source_lineno-(SOURCE_CHUNK_MAX_CONTEXT/2), 1)
-		new_end := new_start + SOURCE_CHUNK_MAX_CONTEXT
+		new_end := new_start + SOURCE_CHUNK_MAX_CONTEXT // exclusive
 		if new_end > len(source_lines) {
-			new_start = max(len(source_lines)+SOURCE_CHUNK_MAX_CONTEXT, 1)
-			new_end = len(source_lines)
+			new_end = len(source_lines) + 1
+			new_start = max(new_end - SOURCE_CHUNK_MAX_CONTEXT, 1)
 		}
 		new_source_lineno := source_lineno - new_start + 1
 		return analyzeEditAndMapLine(source_lines[new_start-1:new_end-1], target_lines, new_source_lineno)
