@@ -185,7 +185,7 @@ func checkoutOne(r *RepoConfig) error {
 		return err
 	}
 
-	return retryCommand("git", []string{"-C", r.Path, "fetch", "-p", "master"})
+	return retryCommand("git", []string{"-C", r.Path, "fetch", "-p", "origin", "master"})
 }
 
 func reloadBackend(addr string) error {
