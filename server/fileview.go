@@ -290,7 +290,7 @@ func buildFileData(relativePath string, repo config.RepoConfig, commit string) (
 
 	fastForwardLink := ""
 	if headCommitHash != "" && commitHash != headCommitHash {
-		fastForwardLink = "?commit=" + commitHash[:16] + "&ffl=1"
+		fastForwardLink = "?commit=" + commitHash + "&ffl=1"
 	}
 
 	return &fileViewerContext{

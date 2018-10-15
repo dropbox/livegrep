@@ -154,6 +154,11 @@ func (s *server) ServeFile(ctx context.Context, w http.ResponseWriter, r *http.R
 			http.Error(w, "Invalid line number", 404)
 			return
 		}
+		out, err := gitShowCommit(commit, repo.Path, false)
+		if err == nil {
+			commit = out[:strings.Index(out, "\n")][:16]
+		}
+		fmt.Print(commit, " ", head, "\n")
 		if commit != head {
 			ff_commit, ff_lineno, err := FastForward(repo, path, commit, head, source_lineno)
 			if err != nil {
