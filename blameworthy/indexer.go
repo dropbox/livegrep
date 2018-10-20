@@ -86,7 +86,10 @@ func (history GitHistory) FileBlameWithStart(start_commit, target_commit, path s
 
 	// Get the starting line count of the file.
 	initial_line_count := fileHistory[indices[0]-1].LineCountAfter
-	segments := BlameSegments{{initial_line_count, 1, fileHistory[indices[0]-1].Commit}}
+	// Synthesize a Commit struct to pretend that we have a commit at `start_commit`.
+	anchor_commit := *fileHistory[indices[0]-1].Commit
+	anchor_commit.Hash = start_commit
+	segments := BlameSegments{{initial_line_count, 1, &anchor_commit}}
 	for i := indices[0]; i < indices[1]; i++ {
 		segments = fileHistory[i].step(segments)
 	}
