@@ -298,7 +298,9 @@ function init(initData) {
       $('#query').blur();
     } else if(String.fromCharCode(event.which) == 'B') {
       // Visually highlight the link to indicate what happened
-      $('#blame-link').focus();
+      var $a = $('#blame-link');
+      if ($a.length == 0) return;
+      $a.focus();
       window.location = $('#blame-link').attr('href');
     } else if(String.fromCharCode(event.which) == 'F') {
       var $a = $('#ff-link');

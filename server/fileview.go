@@ -299,7 +299,7 @@ func buildFileData(relativePath string, repo config.RepoConfig, commit string) (
 		Commit:           commit,
 		DirContent:       dirContent,
 		FileContent:      fileContent,
-		IsBlameAvailable: blameHistory != nil,
+		IsBlameAvailable: objectType == "blob" && blameHistory != nil,
 		ExternalDomain:   externalDomain,
 		Permalink:        permalink,
 		FastForwardLink:  fastForwardLink,
