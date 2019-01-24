@@ -190,6 +190,13 @@ func buildBlameData(
 	obj := commitHash + ":" + path
 	content, err := gitCatBlob(obj, repo.Path)
 	if err != nil {
+		content, _ := gitObjectType(obj, repo.Path)
+		if content == "tree" {
+			err = fmt.Errorf("Error: blame only supports files," +
+				" not directories")
+		} else {
+			err = fmt.Errorf("404 Not Found")
+		}
 		return err
 	}
 
