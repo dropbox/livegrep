@@ -10,6 +10,7 @@
 #include "src/chunk_allocator.h"
 #include "src/content.h"
 #include "src/dump_load.h"
+#include "src/lib/debug.h"
 
 #include <map>
 #include <string>
@@ -19,8 +20,10 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
+#include <string.h>
 
-#include <json-c/json.h>
+#include "google/protobuf/util/json_util.h"
 
 class codesearch_index {
 public:
@@ -100,7 +103,10 @@ private:
         }
 
         off_t off = index_->stream_.tellp();
-        assert(ftruncate(index_->fd_, off + len) == 0);
+        int err = ftruncate(index_->fd_, off + len);
+        if (err != 0) {
+            die("ftruncate");
+        }
         buf = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED,
                    index_->fd_, off);
         assert(buf != MAP_FAILED);
@@ -176,7 +182,7 @@ public:
 
     virtual chunk *alloc_chunk();
     virtual buffer alloc_content_chunk() {
-        assert(0);
+        die("load_allocator::alloc_content_chunk");
     }
 
     virtual void free_chunk(chunk *chunk) {
@@ -214,7 +220,7 @@ protected:
         p_ = static_cast<uint8_t*>(map_) + off;
     }
 
-    indexed_file *load_file(code_searcher *cs);
+    std::unique_ptr<indexed_file> load_file(code_searcher *cs);
     void load_chunk(code_searcher *);
 
     uint32_t load_int32() {
@@ -238,8 +244,8 @@ protected:
     chunk_header *next_chunk_;
 };
 
-chunk_allocator *make_dump_allocator(code_searcher *search, const string& path) {
-    return new dump_allocator(search, path.c_str());
+std::unique_ptr<chunk_allocator> make_dump_allocator(code_searcher *search, const string& path) {
+    return std::make_unique<dump_allocator>(search, path.c_str());
 }
 
 void codesearch_index::dump_file(map<const indexed_tree*, int>& ids, indexed_file *sf) {
@@ -276,7 +282,10 @@ void codesearch_index::dump_chunk_data(chunk *chunk) {
     chdr.size = chunk->size;
     chunks_.push_back(chdr);
 
-    assert(ftruncate(fd_, off + 5 * hdr_.chunk_size) == 0);
+    int err = ftruncate(fd_, off + 5 * hdr_.chunk_size);
+    if (err != 0) {
+        die("ftruncate");
+    }
     stream_.write(reinterpret_cast<char*>(chunk->data), hdr_.chunk_size);
     stream_.write(reinterpret_cast<char*>(chunk->suffixes),
                   sizeof(uint32_t) * chunk->size);
@@ -299,16 +308,18 @@ void codesearch_index::dump_metadata() {
          it != cs_->trees_.end(); ++it) {
         dump_string((*it)->name);
         dump_string((*it)->version);
-        if ((*it)->metadata)
-            dump_string(json_object_to_json_string((*it)->metadata));
-        else
-            dump_string("");
-        tree_ids[*it] = it - cs_->trees_.begin();
+        string metadata;
+        auto st = google::protobuf::util::MessageToJsonString((*it)->metadata, &metadata);
+        if (!st.ok()) {
+            die("protobuf: %s", st.ToString().c_str());
+        }
+        dump_string(metadata);
+        tree_ids[it->get()] = it - cs_->trees_.begin();
     }
     hdr_.files_off = stream_.tellp();
-    for (vector<indexed_file*>::iterator it = cs_->files_.begin();
+    for (auto it = cs_->files_.begin();
          it != cs_->files_.end(); ++it)
-        dump_file(tree_ids, *it);
+        dump_file(tree_ids, it->get());
 
     auto hdr = chunks_.begin();
     for (auto it = cs_->alloc_->begin();
@@ -368,7 +379,10 @@ load_allocator::load_allocator(code_searcher *cs, const string& path) {
         exit(1);
     }
     struct stat st;
-    assert(fstat(fd_, &st) == 0);
+    int err = fstat(fd_, &st);
+    if (err != 0) {
+        die("Cannot stat: '%s': %s\n", path.c_str(), strerror(errno));
+    }
     map_size_ = st.st_size;
     map_ = mmap(NULL, map_size_, PROT_READ, MAP_SHARED,
                 fd_, 0);
@@ -391,9 +405,9 @@ chunk *load_allocator::alloc_chunk() {
     return new chunk(data, indexes);
 }
 
-indexed_file *load_allocator::load_file(code_searcher *cs) {
-    indexed_file *sf = new indexed_file;
-    sf->tree = cs->trees_[load_int32()];
+unique_ptr<indexed_file> load_allocator::load_file(code_searcher *cs) {
+    auto sf = std::make_unique<indexed_file>();
+    sf->tree = cs->trees_[load_int32()].get();
     sf->path = load_string();
     sf->no = cs->files_.size();
     return sf;
@@ -413,7 +427,7 @@ void load_allocator::load_chunk(code_searcher *cs) {
         chunk_file &cf = chunk->files.back();
         uint32_t nfiles = load_int32();
         for (int j = 0; j < nfiles; j++)
-            cf.files.push_back(cs->files_[load_int32()]);
+            cf.files.push_back(cs->files_[load_int32()].get());
         cf.left  = load_int32();
         cf.right = load_int32();
     }
@@ -434,19 +448,18 @@ void load_allocator::load(code_searcher *cs) {
 
     p_ = ptr<uint8_t>(hdr_->refs_off);
     for (int i = 0; i < hdr_->ntrees; i++) {
-        indexed_tree *tree = new indexed_tree;
+        auto tree = std::make_unique<indexed_tree>();
         tree->name = load_string();
         tree->version = load_string();
         string metadata = load_string();
-        if (metadata.size() == 0) {
-            tree->metadata = NULL;
-        } else {
-            json_object *js = json_tokener_parse(metadata.c_str());
-            assert(!is_error(js));
-            tree->metadata = js;
+        if (metadata.size() != 0) {
+            auto status = google::protobuf::util::JsonStringToMessage(metadata, &tree->metadata, google::protobuf::util::JsonParseOptions());
+            if (!status.ok()) {
+                die("parse metadata: %s", status.ToString().c_str());
+            }
         }
 
-        cs->trees_.push_back(tree);
+        cs->trees_.push_back(move(tree));
     }
 
     p_ = ptr<uint8_t>(hdr_->files_off);
@@ -491,7 +504,7 @@ void code_searcher::dump_index(const string &path) {
 }
 
 void code_searcher::load_index(const string &path) {
-    load_allocator *alloc = new load_allocator(this, path);
-    set_alloc(alloc);
-    alloc->load(this);
+    std::unique_ptr<load_allocator> alloc = std::make_unique<load_allocator>(this, path);
+    set_alloc(move(alloc));
+    dynamic_cast<load_allocator*>(alloc_.get())->load(this);
 }

@@ -28,13 +28,14 @@
 #include "src/codesearch.h"
 #include "src/chunk.h"
 #include "src/chunk_allocator.h"
-#include "src/indexer.h"
+#include "src/query_planner.h"
 #include "src/content.h"
+
+#include "absl/strings/string_view.h"
 
 #include "divsufsort.h"
 #include "re2/re2.h"
 #include "gflags/gflags.h"
-#include <json-c/json.h>
 
 #include "utf8.h"
 
@@ -65,10 +66,6 @@ namespace {
     metric idx_data_chunks("index.data.chunks");
     metric idx_content_chunks("index.content.chunks");
     metric idx_content_ranges("index.content.ranges");
-    metric idx_hash_time("timer.index.dedup.hash");
-    metric idx_index_file_time("timer.index.index_file");
-    metric idx_add_chunk_file_time("timer.index.add_chunk_file");
-    metric idx_finish_file_time("timer.index.finish_file");
 };
 
 #ifdef __APPLE__
@@ -94,17 +91,8 @@ memrchr(const void *s,
 }
 #endif
 
-bool eqstr::operator()(const StringPiece& lhs, const StringPiece& rhs) const {
-    if (lhs.data() == NULL && rhs.data() == NULL)
-        return true;
-    if (lhs.data() == NULL || rhs.data() == NULL)
-        return false;
-    return lhs == rhs;
-}
-
 size_t hashstr::operator()(const StringPiece& str) const {
-    const std::collate<char>& coll = std::use_facet<std::collate<char> >(loc);
-    return coll.hash(str.data(), str.data() + str.size());
+    return absl::Hash<absl::string_view>{}(absl::string_view(str.data(), str.size()));
 }
 
 const StringPiece empty_string(NULL, 0);
@@ -206,20 +194,16 @@ class searcher {
 public:
     searcher(const code_searcher *cc,
              const query &q,
-             const intrusive_ptr<IndexKey> index_key,
+             const intrusive_ptr<QueryPlan> index_key,
              const code_searcher::search_thread::transform_func& func) :
         cc_(cc), query_(&q), transform_(func), queue_(),
         limiter_(q.max_matches), index_key_(index_key), re2_time_(false),
         git_time_(false), index_time_(false), sort_time_(false),
-        analyze_time_(false), files_(new uint8_t[cc->files_.size()]),
+        analyze_time_(false), files_(cc->files_.size(), 0xff),
         files_density_(-1)
-    {
-        memset(files_, 0xff, cc->files_.size());
-    }
+    {}
 
     ~searcher() {
-        delete[] files_;
-
         debug(kDebugProfile, "re2 time: %d.%06ds",
               int(re2_time_.elapsed().tv_sec),
               int(re2_time_.elapsed().tv_usec));
@@ -277,7 +261,7 @@ protected:
         int hits = 0;
         int sample = min(1000, int(cc_->files_.size()));
         for (int i = 0; i < sample; i++) {
-            if (accept(query_, cc_->files_[rand() % cc_->files_.size()]))
+            if (accept(query_, cc_->files_[rand() % cc_->files_.size()].get()))
                 hits++;
         }
         return (files_density_ = double(hits) / sample);
@@ -285,7 +269,7 @@ protected:
 
     /*
      * Do a linear walk over chunk->files, searching for all files
-     * which contain `match', which is contained within `line'.
+p     * which contain `match', which is contained within `line'.
      */
     void find_match_brute(const chunk *chunk,
                           const StringPiece& match,
@@ -350,13 +334,13 @@ protected:
     const code_searcher::search_thread::transform_func transform_;
     thread_queue<match_result*> queue_;
     search_limiter limiter_;
-    intrusive_ptr<IndexKey> index_key_;
+    intrusive_ptr<QueryPlan> index_key_;
     timer re2_time_;
     timer git_time_;
     timer index_time_;
     timer sort_time_;
     timer analyze_time_;
-    uint8_t *files_;
+    vector<uint8_t> files_;
 
     /*
      * The approximate ratio of how many files match file_pat and
@@ -373,7 +357,7 @@ class filename_searcher {
 public:
     filename_searcher(const code_searcher *cc,
                       const query &q,
-                      intrusive_ptr<IndexKey> index_key) :
+                      intrusive_ptr<QueryPlan> index_key) :
         cc_(cc), query_(&q), index_key_(index_key), queue_(), limiter_(q.max_matches)
     {}
 
@@ -388,7 +372,7 @@ protected:
 
     const code_searcher *cc_;
     const query *query_;
-    intrusive_ptr<IndexKey> index_key_;
+    intrusive_ptr<QueryPlan> index_key_;
     thread_queue<file_result*> queue_;
     search_limiter limiter_;
 
@@ -396,26 +380,28 @@ protected:
 };
 
 int suffix_search(const unsigned char *data,
-                  uint32_t *suffixes,
+                  const uint32_t *suffixes,
                   int size,
-                  intrusive_ptr<IndexKey> index,
+                  intrusive_ptr<QueryPlan> index,
                   vector<uint32_t> &indexes_out);
 
 void filename_searcher::operator()()
 {
     static per_thread<vector<uint32_t> > indexes;
     if (!indexes.get()) {
-        indexes.put(new vector<uint32_t>(cc_->filename_data_size_ / kMinFilterRatio / 10));
+        indexes.put(new vector<uint32_t>(cc_->filename_data_.size() / kMinFilterRatio / 10));
     }
 
-    int count = suffix_search(cc_->filename_data_, cc_->filename_suffixes_, cc_->filename_data_size_, index_key_, *indexes);
+    int count = suffix_search(cc_->filename_data_.data(),
+                              cc_->filename_suffixes_.data(),
+                              cc_->filename_data_.size(), index_key_, *indexes);
 
     if (count > indexes->size()) {
         for (auto it = cc_->files_.begin(); it < cc_->files_.end(); it++) {
             if (limiter_.exit_early()) {
                 return;
             }
-            match_filename(*it);
+            match_filename(it->get());
         }
         return;
     }
@@ -480,59 +466,42 @@ void filename_searcher::match_filename(indexed_file *file) {
 }
 
 code_searcher::code_searcher()
-    : alloc_(0), finalized_(false), filename_data_(NULL), filename_suffixes_(NULL)
+    : alloc_(), finalized_(false), filename_data_(), filename_suffixes_()
 {
-#ifdef USE_DENSE_HASH_SET
-    lines_.set_empty_key(empty_string);
-#endif
 }
 
-void code_searcher::set_alloc(chunk_allocator *alloc) {
+void code_searcher::set_alloc(std::unique_ptr<chunk_allocator> alloc) {
     assert(!alloc_);
-    alloc_ = alloc;
+    alloc_ = move(alloc);
 }
 
 code_searcher::~code_searcher() {
     if (alloc_)
         alloc_->cleanup();
-    delete alloc_;
-    for (auto tree : trees_) {
-        if (tree->metadata != NULL) {
-            json_object_put(tree->metadata);
-        }
-        delete tree;
-    }
-    for (auto file : files_) {
-        delete file;
-    }
-    if (filename_data_ != NULL) {
-        delete[] filename_data_;
-    }
-    if (filename_suffixes_ != NULL) {
-        delete[] filename_suffixes_;
-    }
 }
 
 void code_searcher::index_filenames() {
     log("Building filename index...");
     filename_positions_.reserve(files_.size());
 
-    filename_data_size_ = 0;
+    size_t filename_data_size = 0;
     for (auto it = files_.begin(); it != files_.end(); ++it) {
-        filename_data_size_ += (*it)->path.size() + 1;
+        filename_data_size += (*it)->path.size() + 1;
     }
 
-    filename_data_ = new unsigned char[filename_data_size_];
+    filename_data_.resize(filename_data_size);
     int offset = 0;
     for (auto it = files_.begin(); it != files_.end(); ++it) {
-        memcpy(filename_data_ + offset, (*it)->path.data(), (*it)->path.size());
+        memcpy(filename_data_.data() + offset, (*it)->path.data(), (*it)->path.size());
         filename_data_[offset + (*it)->path.size()] = '\0';
-        filename_positions_.emplace_back(offset, *it);
+        filename_positions_.emplace_back(offset, it->get());
         offset += (*it)->path.size() + 1;
     }
 
-    filename_suffixes_ = new uint32_t[filename_data_size_];
-    divsufsort(filename_data_, reinterpret_cast<saidx_t*>(filename_suffixes_), filename_data_size_);
+    filename_suffixes_.resize(filename_data_size);
+    divsufsort(filename_data_.data(),
+               reinterpret_cast<saidx_t*>(filename_suffixes_.data()),
+               filename_data_size);
 }
 
 void code_searcher::finalize() {
@@ -559,24 +528,24 @@ vector<indexed_tree> code_searcher::trees() const {
 }
 
 const indexed_tree* code_searcher::open_tree(const string &name,
-                                             json_object *metadata,
+                                             const Metadata &metadata,
                                              const string &version) {
-    indexed_tree *tree = new indexed_tree;
+    auto tree = std::make_unique<indexed_tree>();
     tree->name = name;
     tree->version = version;
-    if (metadata) {
-        tree->metadata = metadata;
-    } else {
-        tree->metadata = NULL;
-    }
-    trees_.push_back(tree);
-    return tree;
+    tree->metadata = metadata;
+    trees_.push_back(move(tree));
+    return trees_.back().get();
+}
+
+const indexed_tree* code_searcher::open_tree(const string &name,
+                                             const string &version) {
+    return open_tree(name, Metadata(), version);
 }
 
 void code_searcher::index_file(const indexed_tree *tree,
                                const string& path,
                                StringPiece contents) {
-    metric::timer tm(idx_index_file_time);
     assert(!finalized_);
     assert(alloc_);
     size_t len = contents.size();
@@ -593,15 +562,15 @@ void code_searcher::index_file(const indexed_tree *tree,
     idx_bytes.inc(len);
     idx_files.inc();
 
-    indexed_file *sf = new indexed_file;
-    sf->tree = tree;
-    sf->path = path;
-    sf->no  = files_.size();
-    files_.push_back(sf);
+    auto file = std::make_unique<indexed_file>();
+    file->tree = tree;
+    file->path = path;
+    file->no  = files_.size();
+    auto *sf = file.get();
+    files_.push_back(move(file));
 
     uint32_t lines = count(p, end, '\n');
 
-    // sf->content = new(new uint32_t[3*lines+1]) file_contents(0);
     file_contents_builder content;
 
     while ((f = static_cast<const char*>(memchr(p, '\n', end - p))) != 0) {
@@ -613,9 +582,8 @@ void code_searcher::index_file(const indexed_tree *tree,
             // preserved.
             p = f;
         }
-        string_hash::iterator it;
-        {
-            metric::timer tm(idx_hash_time);
+        decltype(lines_)::iterator it = lines_.end();
+        if (FLAGS_compress) {
             it = lines_.find(StringPiece(p, f - p));
         }
         if (it == lines_.end()) {
@@ -627,7 +595,6 @@ void code_searcher::index_file(const indexed_tree *tree,
             alloc[f - p] = '\n';
             line = StringPiece((char*)alloc, f - p);
             if (FLAGS_compress) {
-                metric::timer tm(idx_hash_time);
                 if (alloc_->current_chunk() != prev)
                     lines_.clear();
                 lines_.insert(line);
@@ -639,7 +606,6 @@ void code_searcher::index_file(const indexed_tree *tree,
                 (reinterpret_cast<const unsigned char*>(line.data()));
         }
         {
-            metric::timer tm(idx_add_chunk_file_time);
             c->add_chunk_file(sf, line);
         }
         content.extend(c, line);
@@ -654,22 +620,19 @@ void code_searcher::index_file(const indexed_tree *tree,
         goto final;
     }
 
-    sf->content = content.build(alloc_);
+    sf->content = content.build(alloc_.get());
     if (sf->content == 0) {
         fprintf(stderr, "WARN: %s:%s:%s is too large to be indexed.\n",
                 tree->name.c_str(), tree->version.c_str(), path.c_str());
         file_contents_builder dummy;
-        sf->content = dummy.build(alloc_);
+        sf->content = dummy.build(alloc_.get());
     }
     idx_content_ranges.inc(sf->content->size());
     assert(sf->content->size() <= 3*lines);
 
-    {
-        metric::timer tm(idx_finish_file_time);
-        for (auto it = alloc_->begin();
-             it != alloc_->end(); it++) {
-            (*it)->finish_file();
-        }
+    for (auto it = alloc_->begin();
+         it != alloc_->end(); it++) {
+        (*it)->finish_file();
     }
 }
 
@@ -704,8 +667,8 @@ void searcher::operator()(const chunk *chunk)
 }
 
 struct walk_state {
-    uint32_t *left, *right;
-    intrusive_ptr<IndexKey> key;
+    const uint32_t *left, *right;
+    intrusive_ptr<QueryPlan> key;
     int depth;
 };
 
@@ -730,9 +693,9 @@ struct lt_index {
 };
 
 int suffix_search(const unsigned char *data,
-                  uint32_t *suffixes,
+                  const uint32_t *suffixes,
                   int size,
-                  intrusive_ptr<IndexKey> index,
+                  intrusive_ptr<QueryPlan> index,
                   vector<uint32_t> &indexes_out) {
     int count = 0;
     vector<walk_state> stack;
@@ -753,11 +716,11 @@ int suffix_search(const unsigned char *data,
             continue;
         }
         lt_index lt = {data, st.depth};
-        for (IndexKey::iterator it = st.key->begin();
+        for (QueryPlan::iterator it = st.key->begin();
              it != st.key->end(); ++it) {
-            uint32_t *l, *r;
+            const uint32_t *l, *r;
             l = lower_bound(st.left, st.right, it->first.first, lt);
-            uint32_t *right = lower_bound(l, st.right,
+            const uint32_t *right = lower_bound(l, st.right,
                                           (unsigned char)(it->first.second + 1),
                                           lt);
             if (l == right)
@@ -992,7 +955,7 @@ void searcher::find_match(const chunk *chunk,
 
     vector<chunk_file_node *> stack;
     assert(chunk->cf_root);
-    stack.push_back(chunk->cf_root);
+    stack.push_back(chunk->cf_root.get());
 
     debug(kDebugSearch, "find_match(%d)", loff);
 
@@ -1008,7 +971,7 @@ void searcher::find_match(const chunk *chunk,
             continue;
         if (loff >= n->chunk->left) {
             if (n->right)
-                stack.push_back(n->right);
+                stack.push_back(n->right.get());
             if (loff <= n->chunk->right) {
                 debug(kDebugSearch, "visit <%d-%d>", n->chunk->left, n->chunk->right);
                 assert(loff >= n->chunk->left && loff <= n->chunk->right);
@@ -1023,7 +986,7 @@ void searcher::find_match(const chunk *chunk,
             }
         }
         if (n->left)
-            stack.push_back(n->left);
+            stack.push_back(n->left.get());
     }
 }
 
@@ -1033,10 +996,10 @@ void searcher::try_match(const StringPiece& line,
                          indexed_file *sf) {
 
     int lno = 1;
-    auto it = sf->content->begin(cc_->alloc_);
+    auto it = sf->content->begin(cc_->alloc_.get());
 
     while (true) {
-        for (;it != sf->content->end(cc_->alloc_); ++it) {
+        for (;it != sf->content->end(cc_->alloc_.get()); ++it) {
             if (line.data() >= it->data() &&
                 line.data() <= it->data() + it->size()) {
                 lno += count(it->data(), line.data(), '\n');
@@ -1048,7 +1011,7 @@ void searcher::try_match(const StringPiece& line,
 
         debug(kDebugSearch, "found match on %s:%d", sf->path.c_str(), lno);
 
-        if (it == sf->content->end(cc_->alloc_))
+        if (it == sf->content->end(cc_->alloc_.get()))
             return;
 
         match_result *m = new match_result;
@@ -1066,7 +1029,7 @@ void searcher::try_match(const StringPiece& line,
 
         for (i = 0; i < kContextLines; i++) {
             if (l.data() == bit->data()) {
-                if (bit == sf->content->begin(cc_->alloc_))
+                if (bit == sf->content->begin(cc_->alloc_.get()))
                     break;
                 --bit;
                 l = StringPiece(bit->data() + bit->size() + 1, 0);
@@ -1079,7 +1042,7 @@ void searcher::try_match(const StringPiece& line,
 
         for (i = 0; i < kContextLines; i++) {
             if (l.data() + l.size() == fit->data() + fit->size()) {
-                if (++fit == sf->content->end(cc_->alloc_))
+                if (++fit == sf->content->end(cc_->alloc_.get()))
                     break;
                 l = StringPiece(fit->data() - 1, 0);
             }
@@ -1129,10 +1092,10 @@ void code_searcher::search_thread::match(const query &q,
     }
 
     timer analyze_time(false);
-    intrusive_ptr<IndexKey> index_key;
+    intrusive_ptr<QueryPlan> index_key;
     {
         run_timer run(analyze_time);
-        index_key = indexRE(*q.line_pat);
+        index_key = constructQueryPlan(*q.line_pat);
     }
     debug(kDebugProfile, "analyze time: %d.%06ds",
           int(analyze_time.elapsed().tv_sec),

@@ -8,14 +8,17 @@
 #include "src/tools/limits.h"
 #include "src/tools/grpc_server.h"
 
+#include "google/protobuf/repeated_field.h"
+
 #include "gflags/gflags.h"
-#include <json-c/json.h>
 
 #include <algorithm>
 #include <cctype>
 #include <functional>
 #include <future>
 #include <string>
+
+#include "utf8.h"
 
 #include <boost/bind.hpp>
 
@@ -85,25 +88,7 @@ Status CodeSearchImpl::Info(ServerContext* context, const ::InfoRequest* request
         auto insert = response->add_trees();
         insert->set_name(it->name);
         insert->set_version(it->version);
-        if (it->metadata == NULL)
-            continue;
-        auto metadata = insert->mutable_metadata();
-        json_object_object_foreach(it->metadata, key, val) {
-            switch (json_object_get_type(val)) {
-            case json_type_null:
-            case json_type_array:
-            case json_type_object:
-                break;
-            case json_type_boolean:
-            case json_type_double:
-            case json_type_int:
-                (*metadata)[string(key)] = string(json_object_to_json_string(val));
-                break;
-            case json_type_string:
-                (*metadata)[string(key)] = string(json_object_get_string(val));
-                break;
-            }
-        }
+        insert->mutable_metadata()->CopyFrom(it->metadata);
     }
     response->set_has_tags(tagdata_ != nullptr);
     response->set_index_time(cs_->index_timestamp());
@@ -162,6 +147,14 @@ Status parse_query(query *q, const ::Query* request, ::CodeSearchResult* respons
 }
 
 class add_match {
+    void insert_string_back(google::protobuf::RepeatedPtrField<string> *field, StringPiece str) const {
+        if (utf8::is_valid(str.begin(), str.end())) {
+            field->Add(str.ToString());
+        } else {
+            field->Add("<invalid utf-8>");
+        }
+    }
+
 public:
     typedef std::set<std::pair<indexed_file*, int>> line_set;
 
@@ -185,13 +178,12 @@ public:
         result->set_version(m->file->tree->version);
         result->set_path(m->file->path);
         result->set_line_number(m->lno);
-        std::transform(m->context_before.begin(), m->context_before.end(),
-                       RepeatedPtrFieldBackInserter(result->mutable_context_before()),
-                       mem_fun_ref(&re2::StringPiece::ToString));
-
-        std::transform(m->context_after.begin(), m->context_after.end(),
-                       RepeatedPtrFieldBackInserter(result->mutable_context_after()),
-                       mem_fun_ref(&re2::StringPiece::ToString));
+        for (auto &piece : m->context_before) {
+            insert_string_back(result->mutable_context_before(), piece);
+        }
+        for (auto &piece : m->context_after) {
+            insert_string_back(result->mutable_context_after(), piece);
+        }
         result->mutable_bounds()->set_left(m->matchleft);
         result->mutable_bounds()->set_right(m->matchright);
         result->set_line(m->line.ToString());

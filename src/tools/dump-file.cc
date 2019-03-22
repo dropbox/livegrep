@@ -8,7 +8,6 @@
 #include "src/dump_load.h"
 #include "src/codesearch.h"
 #include "src/content.h"
-#include "src/indexer.h"
 #include "src/re_width.h"
 
 #include <gflags/gflags.h>
@@ -34,7 +33,7 @@ int dump_file(int argc, char **argv) {
 
     for (auto it = cs.begin_files(); it != cs.end_files(); ++it) {
         if ((*it)->path == path) {
-            dump_file(&cs, *it);
+            dump_file(&cs, it->get());
             return 0;
         }
     }

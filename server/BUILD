@@ -19,6 +19,7 @@ go_library(
         "//web:templates",
         "//web:webpack_build",
     ],
+    importpath = "github.com/livegrep/livegrep/server",
     visibility = ["//visibility:public"],
     deps = [
         "//blameworthy:go_default_library",
@@ -40,6 +41,6 @@ go_library(
 go_test(
     name = "go_default_test",
     srcs = ["fastforward_test.go", "query_test.go", "server_test.go"],
-    library = ":go_default_library",
+    embed = [":go_default_library"],
     deps = ["//src/proto:go_proto"],
 )

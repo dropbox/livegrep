@@ -9,7 +9,7 @@ class codesearch_test : public ::testing::Test {
 protected:
     codesearch_test() {
         cs_.set_alloc(make_mem_allocator());
-        tree_ = cs_.open_tree("repo", 0, "REV0");
+        tree_ = cs_.open_tree("repo", "REV0");
     }
 
     code_searcher cs_;
@@ -26,7 +26,7 @@ TEST_F(codesearch_test, IndexTest) {
 
     EXPECT_EQ(1, cs_.end_files() - cs_.begin_files());
 
-    indexed_file *f = *cs_.begin_files();
+    indexed_file *f = cs_.begin_files()->get();
     EXPECT_EQ("/data/file1", f->path);
     EXPECT_EQ(tree_, f->tree);
 
@@ -61,7 +61,7 @@ TEST_F(codesearch_test, NoTrailingNewLine) {
 
     EXPECT_EQ(1, cs_.end_files() - cs_.begin_files());
 
-    indexed_file *f = *cs_.begin_files();
+    indexed_file *f = cs_.begin_files()->get();
     EXPECT_EQ("/data/file1", f->path);
     EXPECT_EQ(tree_, f->tree);
 
@@ -130,7 +130,7 @@ TEST_F(codesearch_test, RestrictFiles) {
     cs_.index_file(tree_, "/file1", "contents");
     cs_.index_file(tree_, "/file2", "contents");
     // other is "OTHER"
-    const indexed_tree *other = cs_.open_tree("OTHER", 0, "REV0");
+    const indexed_tree *other = cs_.open_tree("OTHER", "REV0");
     cs_.index_file(other, "/file1", "contents");
     cs_.index_file(other, "/file2", "contents");
     cs_.finalize();
@@ -185,7 +185,7 @@ TEST_F(codesearch_test, Tags) {
 
     code_searcher tags;
     tags.set_alloc(make_mem_allocator());
-    const indexed_tree *tag_tree = cs_.open_tree("", 0, "HEAD");
+    const indexed_tree *tag_tree = cs_.open_tree("", "HEAD");
     tags.index_file(tag_tree,
                     "tags",
                     "do_the_thing\trepo/file.c\t1;\"\tfunction\n");
@@ -267,7 +267,7 @@ TEST_F(codesearch_test, LineCaseAndFileCaseAreIndependent) {
 }
 
 TEST_F(codesearch_test, LineCaseAndRepoCaseAreIndependent) {
-    const indexed_tree *other = cs_.open_tree("OTHER", 0, "REV0");
+    const indexed_tree *other = cs_.open_tree("OTHER", "REV0");
     cs_.index_file(tree_, "/file1", "contents");
     cs_.index_file(other, "/file1", "CONTENTS");
     cs_.finalize();
@@ -370,4 +370,34 @@ TEST_F(codesearch_test, FilenameOnlyTest) {
     ASSERT_EQ(0, matches.results_size());
     ASSERT_EQ(1, matches.file_results_size());
     ASSERT_EQ("/file1", matches.file_results(0).path());
+}
+
+TEST_F(codesearch_test, BadUTF8) {
+    cs_.index_file(tree_, "/data/file1",
+                   "line 0\xe9\n"
+                   "line 1\n"
+                   "line 2\n");
+    cs_.finalize();
+
+    std::unique_ptr<CodeSearch::Service> srv(build_grpc_server(&cs_, nullptr, nullptr));
+    Query request;
+    CodeSearchResult matches;
+    request.set_line("line 1");
+
+    grpc::ServerContext ctx;
+
+    grpc::Status st = srv->Search(&ctx, &request, &matches);
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(1, matches.results_size());
+    EXPECT_EQ(2, matches.results(0).line_number());
+    ASSERT_EQ(1, matches.results(0).context_before().size());
+    EXPECT_EQ("<invalid utf-8>",
+              matches.results(0).context_before(0));
+
+    matches.Clear();
+    request.set_line("line 0");
+    st = srv->Search(&ctx, &request, &matches);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(0, matches.results_size());
 }

@@ -16,18 +16,15 @@
 #include <mutex>
 #include <thread>
 #include <functional>
+#include <memory>
 #include <boost/intrusive_ptr.hpp>
 
-#ifdef USE_DENSE_HASH_SET
-#include <google/dense_hash_set>
-#else
-#include <google/sparse_hash_set>
-#endif
-#include <google/sparse_hash_map>
+#include "absl/hash/hash.h"
+#include "absl/container/flat_hash_set.h"
 #include "re2/re2.h"
-#include <locale>
 
 #include "src/lib/thread_queue.h"
+#include "src/proto/config.pb.h"
 
 class searcher;
 class filename_searcher;
@@ -45,27 +42,9 @@ using std::map;
 using std::pair;
 using std::atomic_int;
 
-/*
- * We special-case data() == NULL to provide an "empty" element for
- * dense_hash_set.
- *
- * StringPiece::operator== will consider a zero-length string equal to a
- * zero-length string with a NULL data().
- */
-struct eqstr {
-    bool operator()(const StringPiece& lhs, const StringPiece& rhs) const;
-};
-
 struct hashstr {
-    locale loc;
     size_t operator()(const StringPiece &str) const;
 };
-
-#ifdef USE_DENSE_HASH_SET
-typedef google::dense_hash_set<StringPiece, hashstr, eqstr> string_hash;
-#else
-typedef google::sparse_hash_set<StringPiece, hashstr, eqstr> string_hash;
-#endif
 
 enum exit_reason {
     kExitNone = 0,
@@ -94,11 +73,10 @@ struct match_stats {
 
 struct chunk;
 struct chunk_file;
-struct json_object;
 
 struct indexed_tree {
     string name;
-    json_object *metadata;
+    Metadata metadata;
     string version;
 };
 
@@ -155,14 +133,16 @@ public:
     void dump_index(const string& path);
     void load_index(const string& path);
 
-    const indexed_tree *open_tree(const string &name, json_object *meta, const string& version);
+    const indexed_tree *open_tree(const string &name, const Metadata &meta, const string& version);
+    const indexed_tree *open_tree(const string &name, const string& version);
+
     void index_file(const indexed_tree *tree,
                     const string& path,
                     StringPiece contents);
     void finalize();
 
-    void set_alloc(chunk_allocator *alloc);
-    chunk_allocator *alloc() { return alloc_; }
+    void set_alloc(std::unique_ptr<chunk_allocator> alloc);
+    chunk_allocator *alloc() { return alloc_.get(); }
 
     vector<indexed_tree> trees() const;
     string name() const {
@@ -172,10 +152,10 @@ public:
         name_ = name;
     }
 
-    vector<indexed_file*>::const_iterator begin_files() {
+    vector<std::unique_ptr<indexed_file>>::const_iterator begin_files() {
         return files_.begin();
     }
-    vector<indexed_file*>::const_iterator end_files() {
+    vector<std::unique_ptr<indexed_file>>::const_iterator end_files() {
         return files_.end();
     }
 
@@ -236,9 +216,9 @@ protected:
     // Looking up a StringPiece here will find an equivalent StringPiece
     // already stored in some existing chunk's data, if such a StringPiece is
     // present.
-    string_hash lines_;
+    absl::flat_hash_set<StringPiece, hashstr> lines_;
 
-    chunk_allocator *alloc_;
+    std::unique_ptr<chunk_allocator> alloc_;
 
     // Indicates that everything all is ready for searching--we are done creating
     // index or initializing it from a file.
@@ -249,14 +229,13 @@ protected:
 
     // Structures for fast filename search; somewhat similar to a single chunk.
     // Built from files_ at finalization, not serialized or anything like that.
-    unsigned char *filename_data_;
-    int filename_data_size_;
-    uint32_t *filename_suffixes_;
+    vector<unsigned char> filename_data_;
+    vector<uint32_t> filename_suffixes_;
     // pairs (i, file), where file->path starts at filename_data_[i]
     vector<pair<int, indexed_file*>> filename_positions_;
 
-    vector<indexed_tree*> trees_;
-    vector<indexed_file*> files_;
+    vector<std::unique_ptr<indexed_tree>> trees_;
+    vector<std::unique_ptr<indexed_file>> files_;
 
 private:
     void index_filenames();
@@ -270,9 +249,9 @@ private:
 };
 
 // dump_load.cc
-chunk_allocator *make_dump_allocator(code_searcher *search, const string& path);
+std::unique_ptr<chunk_allocator> make_dump_allocator(code_searcher *search, const string& path);
 // chunk_allocator.cc
-chunk_allocator *make_mem_allocator();
+std::unique_ptr<chunk_allocator> make_mem_allocator();
 
 void default_re2_options(RE2::Options&);
 

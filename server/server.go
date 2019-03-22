@@ -104,7 +104,8 @@ func (s *server) ServeSearch(ctx context.Context, w http.ResponseWriter, r *http
 		RepoUrls           map[string]map[string]string `json:"repo_urls"`
 		InternalViewRepos  map[string]config.RepoConfig `json:"internal_view_repos"`
 		DefaultSearchRepos []string                     `json:"default_search_repos"`
-	}{urls, s.repos, s.config.DefaultSearchRepos}
+		LinkConfigs        []config.LinkConfig          `json:"link_configs"`
+	}{urls, s.repos, s.config.DefaultSearchRepos, s.config.LinkConfigs}
 
 	s.renderPage(ctx, w, r, "index.html", &page{
 		Title:         "code search",
@@ -188,8 +189,9 @@ func (s *server) ServeFile(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	script_data := &struct {
 		RepoInfo config.RepoConfig `json:"repo_info"`
+		FilePath string            `json:"file_path"`
 		Commit   string            `json:"commit"`
-	}{repo, commit}
+	}{repo, path, commit}
 
 	s.renderPage(ctx, w, r, "fileview.html", &page{
 		Title:         data.PathSegments[len(data.PathSegments)-1].Name,
@@ -532,7 +534,7 @@ func (h *reloadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type handler func(c context.Context, w http.ResponseWriter, r *http.Request)
 
-const RequestTimeout = 8 * time.Second
+const RequestTimeout = 30 * time.Second
 
 func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()

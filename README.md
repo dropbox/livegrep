@@ -69,6 +69,9 @@ index has been built. You can just launch a search server like so:
 
     bazel-bin/src/tools/codesearch -load_index livegrep.idx -grpc localhost:9999
 
+The schema for the `codesearch` configuration file defined using
+protobuf in `src/proto/config.proto`.
+
 ## `livegrep`
 
 The `livegrep` frontend expects an optional position argument
@@ -96,6 +99,30 @@ the repos in `repos/` and writing `nelhage.idx`, you might run:
 You can now use `nelhage.idx` as an argument to `codesearch
 -load_index`.
 
+Docker images
+-------------
+
+I build [docker images][docker] for livegrep out of the
+[livegrep.com](https://github.com/livegrep/livegrep.com) repository,
+based on build images created by this repository's CI. They should be
+generally usable. For instance, to build+run a livegrep index of this
+repository, you could run:
+
+```
+docker run -v $(pwd):/data livegrep/indexer /livegrep/bin/livegrep-github-reindex -repo livegrep/livegrep -http -dir /data
+docker network create livegrep
+docker run -v $(pwd):/data --network livegrep livegrep/base /livegrep/bin/codesearch -load_index /data/livegrep.idx -grpc 0.0.0.0:9999
+docker run -d --network livegrep --publish 8910:8910 livegrep/base /livegrep/bin/livegrep -docroot /livegrep/web -listen=0.0.0.0:8910
+```
+
+And then access http://localhost:8910/
+
+You can also find the [docker-compose config powering
+livegrep.com][docker-compose] in that same repository.
+
+[docker]: https://hub.docker.com/u/livegrep
+[docker-compose]: https://github.com/livegrep/livegrep.com/tree/master/compose
+
 Resource Usage
 --------------
 
@@ -103,11 +130,12 @@ livegrep builds an index file of your source code, and then works
 entirely out of that index, with no further access to the original git
 repositories.
 
-In general, the index file will be approximately the same size as the
-original source code. livegrep memory-maps the index file into RAM, so
-it should be able to work out of index files larger than (available)
-RAM, but will perform much better if the file can be loaded entirely
-into memory.
+The index file will vary somewhat in size, but will usually be 3-5x
+the size of the indexed text. `livegrep` memory-maps the index file
+into RAM, so it can work out of index files larger than (available)
+RAM, but will perform better if the file can be loaded entirely into
+memory. Barring that, keeping the disk on fast SSDs is recommended for
+optimal performance.
 
 
 LICENSE

@@ -8,9 +8,7 @@
 #include "src/git_indexer.h"
 #include "src/smart_git.h"
 
-namespace {
-    metric git_walk("timer.git.walk");
-};
+#include "src/proto/config.pb.h"
 
 using namespace std;
 
@@ -20,7 +18,7 @@ DEFINE_bool(revparse, false, "Display parsed revisions, rather than as-provided"
 git_indexer::git_indexer(code_searcher *cs,
                          const string& repopath,
                          const string& name,
-                         json_object *metadata)
+                         const Metadata &metadata)
     : cs_(cs), repo_(0), name_(name), metadata_(metadata) {
     int err;
     if ((err = git_libgit2_init()) < 0)
@@ -60,7 +58,6 @@ void git_indexer::walk(const string& ref) {
 void git_indexer::walk_tree(const string& pfx,
                             const string& order,
                             git_tree *tree) {
-    metric::timer tm_walk(git_walk);
     map<string, const git_tree_entry *> root;
     vector<const git_tree_entry *> ordered;
     int entries = git_tree_entrycount(tree);
@@ -86,7 +83,6 @@ void git_indexer::walk_tree(const string& pfx,
         smart_object<git_object> obj;
         git_tree_entry_to_object(obj, repo_, *it);
         string path = pfx + git_tree_entry_name(*it);
-        tm_walk.pause();
 
         if (git_tree_entry_type(*it) == GIT_OBJ_TREE) {
             walk_tree(path + "/", "", obj);
@@ -94,6 +90,5 @@ void git_indexer::walk_tree(const string& pfx,
             const char *data = static_cast<const char*>(git_blob_rawcontent(obj));
             cs_->index_file(idx_tree_, path, StringPiece(data, git_blob_rawsize(obj)));
         }
-        tm_walk.start();
     }
 }
