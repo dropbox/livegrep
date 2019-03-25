@@ -1,5 +1,5 @@
 load(
-    "@bazel_rules_go//go:def.bzl",
+    "@io_bazel_rules_go//go:def.bzl",
     "go_library",
 )
 
