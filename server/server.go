@@ -73,6 +73,10 @@ func (s *server) loadTemplates() {
 	}
 }
 
+func (s *server) ServeFastSearch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/search/?q=" + r.URL.Query().Get(":query"), 303)
+}
+
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.inner.ServeHTTP(w, r)
 }
@@ -611,6 +615,7 @@ func New(cfg *config.Config) (http.Handler, error) {
 
 	m.Add("GET", "/api/v1/search/:backend", srv.Handler(srv.ServeAPISearch))
 	m.Add("GET", "/api/v1/search/", srv.Handler(srv.ServeAPISearch))
+  m.Add("GET", "/:query/", srv.Handler(srv.ServeFastSearch))
 
 	var h http.Handler = m
 
